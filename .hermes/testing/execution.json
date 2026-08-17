@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-08-17T00:59:10-04:00",
+  "workspace": "/home/roger/workspace/china-travel-app",
+  "host_verification": [
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo test --locked --no-default-features",
+      "exit_code": 0,
+      "tests_passed": 14
+    },
+    {
+      "command": "cargo clippy --locked --no-default-features --all-targets -- -D warnings",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo check",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "exit_code": 0
+    }
+  ],
+  "android_verification": {
+    "rust_target": "aarch64-linux-android",
+    "command": "cargo check --target aarch64-linux-android",
+    "exit_code": 0,
+    "bundle_command": "dx build --android --target aarch64-linux-android",
+    "bundle_exit_code": 0,
+    "apk": "target/dx/china-travel-app/debug/android/app/app/build/outputs/apk/debug/app-debug.apk",
+    "apk_bytes": 178530703,
+    "apk_sha256": "5d7729ec8757b424d39674306727f993f771901956a38eee88fee57f4a4c9ff8",
+    "application_id": "com.rdelacruz.chinatravel",
+    "launch_activity": "dev.dioxus.main.MainActivity",
+    "min_sdk": 26,
+    "target_sdk": 35,
+    "native_abis": ["arm64-v8a"],
+    "manifest_permissions_checked": ["android.permission.INTERNET"],
+    "broad_external_storage_permission_present": false
+  },
+  "tailwind_verification": {
+    "input": "tailwind.css",
+    "output": "assets/tailwind.css",
+    "first_sha256": "de9c7a15962a34a8690e00c94304d2923ccdacf4b5e26cdd57ad9ea8beee3b8f",
+    "second_sha256": "de9c7a15962a34a8690e00c94304d2923ccdacf4b5e26cdd57ad9ea8beee3b8f",
+    "deterministic": true,
+    "bytes": 24087,
+    "representative_utilities_present": true
+  },
+  "device_verification": {
+    "compatible_device": {
+      "serial": "R5CN714SD4K",
+      "abi_list": "arm64-v8a,armeabi-v7a,armeabi",
+      "adb_install_exit_code": 0,
+      "package_path_confirmed": true,
+      "activity_focus_confirmed": true,
+      "home_screen_rendered": true,
+      "startup_bridge_null_response_found_and_fixed": true,
+      "home_screen_after_fix": "zero-count metrics and No trips yet empty state rendered"
+    },
+    "original_connected_device": {
+      "serial": "BYZL25052900312708",
+      "abi_list": "armeabi-v7a,armeabi",
+      "adb_install_result": "INSTALL_FAILED_NO_MATCHING_ABIS",
+      "reason": "Dioxus 0.7 rejects 32-bit Android targets; APK contains arm64-v8a only"
+    }
+  },
+  "scope_notes": [
+    "SQLite CRUD and reopen persistence are covered by integration tests.",
+    "The compatible-device runtime check verified launch, native bridge startup, and Home rendering; coordinate-driven Save interaction was not counted because the device foreground changed to another app during the attempt.",
+    "No raw device logs, document names, or real attachment URIs are stored in this evidence file."
+  ]
+}

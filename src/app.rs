@@ -50,8 +50,7 @@ fn ReadyApp(services: AppServices) -> Element {
     use_context_provider(|| revision);
 
     rsx! {
-        document::Stylesheet { href: asset!("/assets/tailwind.css") }
-        document::Stylesheet { href: asset!("/assets/dx-components-theme.css") }
+        AppStyles {}
         document::Meta { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" }
         Router::<Route> {}
     }
@@ -65,8 +64,7 @@ fn StartupState(
     #[props(default)] retry: Option<EventHandler<MouseEvent>>,
 ) -> Element {
     rsx! {
-        document::Stylesheet { href: asset!("/assets/tailwind.css") }
-        document::Stylesheet { href: asset!("/assets/dx-components-theme.css") }
+        AppStyles {}
         div { class: "flex min-h-dvh items-center justify-center px-6 safe-top safe-bottom",
             section { class: "w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm",
                 div { class: "mb-4 text-3xl", "🧧" }
@@ -86,6 +84,21 @@ fn StartupState(
                 }
             }
         }
+    }
+}
+
+#[cfg(target_os = "android")]
+#[component]
+fn AppStyles() -> Element {
+    rsx! {}
+}
+
+#[cfg(not(target_os = "android"))]
+#[component]
+fn AppStyles() -> Element {
+    rsx! {
+        document::Stylesheet { href: asset!("/assets/tailwind.css") }
+        document::Stylesheet { href: asset!("/assets/dx-components-theme.css") }
     }
 }
 

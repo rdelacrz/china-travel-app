@@ -181,6 +181,13 @@ pub fn Documentation(trip_id: i64) -> Element {
         None => {
             rsx! { p { class: "rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600", "Loading documents…" } }
         }
+        Some(Err(crate::error::DbError::NotFound { entity: "trip", .. })) => rsx! {
+            section { class: "rounded-2xl border border-amber-200 bg-amber-50 p-5",
+                h1 { class: "text-lg font-bold text-amber-950", "Trip not found" }
+                p { class: "mt-2 text-sm leading-6 text-amber-900", "This documentation route no longer points to a saved trip." }
+                a { href: "/", class: "mt-4 inline-flex min-h-12 items-center rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white", "Back to trips" }
+            }
+        },
         Some(Err(error)) => rsx! {
             section { class: "rounded-2xl border border-red-200 bg-red-50 p-5",
                 h1 { class: "text-lg font-bold text-red-900", "Documentation unavailable" }

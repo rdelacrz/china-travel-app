@@ -11,7 +11,7 @@ import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
+import org.json.JSONException
 import org.json.JSONObject
 import java.nio.charset.StandardCharsets
 
@@ -80,7 +80,7 @@ class MainActivity : WryActivity() {
         fun postMessageBase64(payload: String) {
             runOnUiThread {
                 if (!isTrustedPackagedPage()) {
-                    respond("unknown", errorObject("bridge_unavailable", "Untrusted page"))
+                    respond(requestIdFromPayload(payload), errorObject("bridge_unavailable", "Untrusted page"))
                     return@runOnUiThread
                 }
                 handlePayload(payload)
@@ -93,6 +93,9 @@ class MainActivity : WryActivity() {
             val bytes = Base64.decode(payload, Base64.DEFAULT)
             JSONObject(String(bytes, StandardCharsets.UTF_8))
         } catch (_: IllegalArgumentException) {
+            respond("unknown", errorObject("malformed_request", "Malformed request"))
+            return
+        } catch (_: JSONException) {
             respond("unknown", errorObject("malformed_request", "Malformed request"))
             return
         }
@@ -213,6 +216,17 @@ class MainActivity : WryActivity() {
     }
 
     private fun resultObject(kind: String): JSONObject = JSONObject().put("kind", kind)
+
+    private fun requestIdFromPayload(payload: String): String {
+        return try {
+            val bytes = Base64.decode(payload, Base64.DEFAULT)
+            JSONObject(String(bytes, StandardCharsets.UTF_8)).optString("request_id", "unknown")
+        } catch (_: IllegalArgumentException) {
+            "unknown"
+        } catch (_: JSONException) {
+            "unknown"
+        }
+    }
 
     private fun errorObject(code: String, message: String): JSONObject = resultObject("error")
         .put("code", code)

@@ -155,6 +155,13 @@ pub fn Checklist(trip_id: i64) -> Element {
         None => {
             rsx! { p { class: "rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600", "Loading checklist…" } }
         }
+        Some(Err(crate::error::DbError::NotFound { entity: "trip", .. })) => rsx! {
+            section { class: "rounded-2xl border border-amber-200 bg-amber-50 p-5",
+                h1 { class: "text-lg font-bold text-amber-950", "Trip not found" }
+                p { class: "mt-2 text-sm leading-6 text-amber-900", "This checklist route no longer points to a saved trip." }
+                a { href: "/", class: "mt-4 inline-flex min-h-12 items-center rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white", "Back to trips" }
+            }
+        },
         Some(Err(error)) => rsx! {
             section { class: "rounded-2xl border border-red-200 bg-red-50 p-5",
                 h1 { class: "text-lg font-bold text-red-900", "Checklist unavailable" }
@@ -192,20 +199,7 @@ pub fn Checklist(trip_id: i64) -> Element {
                             div { class: "h-full rounded-full bg-red-700 transition-all", style: "width: {progress}%" }
                         }
                     }
-                    div { class: "flex items-center justify-between gap-3",
-                        h2 { class: "text-xl font-bold text-slate-950", "Bring with you" }
-                        Button {
-                            size: ButtonSize::Sm,
-                            disabled: new_draft().is_some(),
-                            onclick: move |_| {
-                                if new_draft().is_none() {
-                                    new_draft.set(Some(String::new()));
-                                    editing.set(Some(-1));
-                                }
-                            },
-                            "+ Add item"
-                        }
-                    }
+                    h2 { class: "text-xl font-bold text-slate-950", "Bring with you" }
                     if items.is_empty() && new_draft().is_none() {
                         div { class: "rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center",
                             p { class: "text-3xl", "🎒" }
@@ -284,6 +278,20 @@ pub fn Checklist(trip_id: i64) -> Element {
                                     }
                                 }
                             }
+                        }
+                    }
+                    div { class: "sticky bottom-20 z-10 pt-2",
+                        Button {
+                            size: ButtonSize::Lg,
+                            class: "min-h-12 w-full shadow-lg",
+                            disabled: new_draft().is_some(),
+                            onclick: move |_| {
+                                if new_draft().is_none() {
+                                    new_draft.set(Some(String::new()));
+                                    editing.set(Some(-1));
+                                }
+                            },
+                            "+ Add item"
                         }
                     }
                     ConfirmDeleteDialog {

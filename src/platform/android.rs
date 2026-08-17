@@ -109,7 +109,7 @@ impl AndroidPlatform {
         let payload = encode_request_base64(&request)
             .map_err(|error| PlatformError::Protocol(error.to_string()))?;
         let script = format!(
-            r#"(async () => {{
+            r#"return (async () => {{
                 const decode = (value) => {{
                     const binary = atob(value);
                     const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));

@@ -34,22 +34,19 @@ cargo test --no-default-features
 cargo clippy --no-default-features --all-targets -- -D warnings
 ```
 
-The application expects `JAVA_HOME`, `ANDROID_HOME`/`ANDROID_SDK_ROOT`, and `ANDROID_NDK_HOME` to be configured by the computer environment. The repository does not modify the Java toolchain. Dioxus 0.7 requires a 64-bit Android target; the supported package target here is `aarch64-linux-android`:
+The application expects `JAVA_HOME`, `ANDROID_HOME`/`ANDROID_SDK_ROOT`, and `ANDROID_NDK_HOME` to be configured by the computer environment. The repository does not modify the Java toolchain.
+
+### Build and install on a connected Android phone
 
 ```bash
-# Use the JDK/SDK/NDK paths provided by the environment.
-dx build --android --target aarch64-linux-android
+scripts/install.sh
+# Or choose a device explicitly:
+scripts/install.sh -s DEVICE_SERIAL
 ```
 
-If the NDK exposes only API-versioned clang wrappers, set the target C compiler and linker for the build shell, for example:
+The installer checks the JDK/SDK/NDK, selects the sole connected `arm64-v8a` device when possible, makes a clean Dioxus Android build, verifies that the APK contains `lib/arm64-v8a/libmain.so`, installs with `adb install -r`, and verifies the package afterward. `-r` preserves the app-private SQLite database.
 
-```bash
-export NDK_BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-export CC_aarch64_linux_android="$NDK_BIN/aarch64-linux-android35-clang"
-export CXX_aarch64_linux_android="$NDK_BIN/aarch64-linux-android35-clang++"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$NDK_BIN/aarch64-linux-android35-clang"
-dx build --android --target aarch64-linux-android
-```
+Selection order is `-s`, `ANDROID_SERIAL`, then the sole compatible device. If several compatible devices are connected, the script stops and asks for `-s`; if only a 32-bit `armeabi-v7a` phone is attached, it stops before building because Dioxus 0.7 cannot target it.
 
 The debug APK is emitted at:
 
@@ -57,10 +54,12 @@ The debug APK is emitted at:
 target/dx/china-travel-app/debug/android/app/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Install on a 64-bit Android device with:
+## App icon
+
+`assets/icon.png` is the canonical star-free route-and-location travel icon. The same PNG is rendered at the top-left of the app header and rasterized into the committed Android launcher density images under `assets/android-launcher/`. `scripts/install.sh` applies those PNGs after Dioxus stages its stock Android launcher resources; storing them outside `mobile/android/res/` and omitting a launcher icon from `Dioxus.toml` avoids Dioxus 0.7.10's duplicate Android PNG/WebP resource collision.
+
+To regenerate all icon sizes after changing the design generator:
 
 ```bash
-adb install -r target/dx/china-travel-app/debug/android/app/app/build/outputs/apk/debug/app-debug.apk
+python3 scripts/generate_icon.py
 ```
-
-The connected validation phone currently advertises only `armeabi-v7a`; Dioxus 0.7 rejects 32-bit targets and the resulting arm64 APK cannot install on that phone (`INSTALL_FAILED_NO_MATCHING_ABIS`). Use a 64-bit Android device or emulator for runtime validation.

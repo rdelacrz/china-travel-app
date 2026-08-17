@@ -1,9 +1,18 @@
 #[cfg(feature = "mobile")]
 use china_travel_app::App;
+#[cfg(feature = "mobile")]
+use dioxus::prelude::*;
 
 #[cfg(feature = "mobile")]
 fn main() {
-    let config = dioxus::mobile::Config::new().with_background_color((248, 250, 252, 255));
+    let custom_head = format!(
+        r#"<link rel="stylesheet" href="{}"><link rel="stylesheet" href="{}">"#,
+        asset!("/assets/tailwind.css"),
+        asset!("/assets/dx-components-theme.css"),
+    );
+    let config = dioxus::mobile::Config::new()
+        .with_custom_head(custom_head)
+        .with_background_color((248, 250, 252, 255));
     dioxus::LaunchBuilder::new().with_cfg(config).launch(App);
 }
 
