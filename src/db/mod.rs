@@ -1,0 +1,100 @@
+use crate::error::DbError;
+use std::path::{Path, PathBuf};
+use tokio_rusqlite::{Connection, Error as TokioSqliteError};
+
+mod checklist;
+mod document;
+mod trip;
+
+const CURRENT_SCHEMA_VERSION: i64 = 1;
+const MIGRATION_SQL: &str = include_str!("../../migrations/0001_initial.sql");
+
+#[derive(Clone, Debug)]
+pub struct Database {
+    connection: Connection,
+    path: Option<PathBuf>,
+}
+
+impl Database {
+    pub async fn open(path: impl AsRef<Path>) -> Result<Self, DbError> {
+        let path = path.as_ref().to_owned();
+        let connection = Connection::open(&path).await.map_err(DbError::Open)?;
+        let database = Self {
+            connection,
+            path: Some(path),
+        };
+        database.configure_and_migrate().await?;
+        Ok(database)
+    }
+
+    pub async fn open_in_memory() -> Result<Self, DbError> {
+        let connection = Connection::open_in_memory().await.map_err(DbError::Open)?;
+        let database = Self {
+            connection,
+            path: None,
+        };
+        database.configure_and_migrate().await?;
+        Ok(database)
+    }
+
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    async fn configure_and_migrate(&self) -> Result<(), DbError> {
+        self.call(|connection| {
+            connection.execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 PRAGMA busy_timeout = 5000;
+                 PRAGMA journal_mode = WAL;
+                 PRAGMA synchronous = NORMAL;",
+            )
+        })
+        .await?;
+
+        let version: i64 = self
+            .call(|connection| connection.query_row("PRAGMA user_version", [], |row| row.get(0)))
+            .await?;
+
+        if version > CURRENT_SCHEMA_VERSION {
+            return Err(DbError::Migration(format!(
+                "database schema version {version} is newer than supported version {CURRENT_SCHEMA_VERSION}"
+            )));
+        }
+
+        if version < CURRENT_SCHEMA_VERSION {
+            self.call(|connection| {
+                let result = (|| {
+                    connection.execute_batch("BEGIN IMMEDIATE;")?;
+                    connection.execute_batch(MIGRATION_SQL)?;
+                    connection.execute_batch("PRAGMA user_version = 1;")?;
+                    connection.execute_batch("COMMIT;")
+                })();
+
+                if result.is_err() {
+                    let _ = connection.execute_batch("ROLLBACK;");
+                }
+                result
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) async fn call<F, R>(&self, function: F) -> Result<R, DbError>
+    where
+        F: FnOnce(&mut tokio_rusqlite::rusqlite::Connection) -> tokio_rusqlite::rusqlite::Result<R>
+            + Send
+            + 'static,
+        R: Send + 'static,
+    {
+        self.connection
+            .call(function)
+            .await
+            .map_err(|error| match &error {
+                TokioSqliteError::ConnectionClosed => DbError::WorkerClosed,
+                _ => DbError::Operation(error),
+            })
+    }
+}

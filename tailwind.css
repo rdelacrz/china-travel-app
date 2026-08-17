@@ -1,0 +1,45 @@
+@import "tailwindcss" source(none);
+
+@source "./src/**/*.{rs,html}";
+@source not "./assets/tailwind.css";
+
+@theme {
+    --color-china-red: #b91c1c;
+    --color-china-red-dark: #991b1b;
+    --color-ink: #172033;
+    --color-paper: #f8fafc;
+}
+
+@layer base {
+    :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: var(--color-paper);
+        color: var(--color-ink);
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        min-width: 320px;
+        min-height: 100dvh;
+        margin: 0;
+        background: var(--color-paper);
+    }
+
+    button,
+    input,
+    textarea {
+        font: inherit;
+    }
+}
+
+@utility safe-bottom {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+}
+
+@utility safe-top {
+    padding-top: env(safe-area-inset-top);
+}

@@ -1,0 +1,14 @@
+[application]
+title = "China Travel Companion"
+tailwind_input = "tailwind.css"
+tailwind_output = "assets/tailwind.css"
+android_main_activity = "android/MainActivity.kt"
+
+[web.app]
+title = "China Travel Companion"
+
+[android]
+identifier = "com.rdelacruz.chinatravel"
+min_sdk = 26
+target_sdk = 35
+compile_sdk = 35

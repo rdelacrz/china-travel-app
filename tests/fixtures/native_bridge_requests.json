@@ -1,0 +1,31 @@
+[
+  {
+    "version": 1,
+    "request_id": "fixture-app-data",
+    "operation": { "kind": "app_data_directory" }
+  },
+  {
+    "version": 1,
+    "request_id": "fixture-picker",
+    "operation": { "kind": "pick_document", "prefer_downloads": true }
+  },
+  {
+    "version": 1,
+    "request_id": "fixture-open-document",
+    "operation": {
+      "kind": "open_document",
+      "uri": "content://provider/document/42",
+      "mime_type": "application/pdf"
+    }
+  },
+  {
+    "version": 1,
+    "request_id": "fixture-open-url",
+    "operation": { "kind": "open_url", "url": "https://example.test/travel" }
+  },
+  {
+    "version": 1,
+    "request_id": "fixture-release",
+    "operation": { "kind": "release_read_permission", "uri": "content://provider/document/42" }
+  }
+]
