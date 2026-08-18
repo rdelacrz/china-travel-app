@@ -362,7 +362,7 @@ pub fn Checklist(trip_id: i64) -> Element {
                             div { class: "h-full rounded-full bg-red-700 transition-all", style: "width: {progress}%" }
                         }
                     }
-                    h2 { class: "text-xl font-bold text-slate-950", "Bring with you" }
+                    h2 { class: "text-xl font-bold text-slate-950", "Checklist items" }
                     if items.is_empty() && new_draft().is_none() {
                         div { class: "rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center",
                             p { class: "text-3xl", "🎒" }

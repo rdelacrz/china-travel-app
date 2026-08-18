@@ -16,7 +16,7 @@ pub fn TripPane(overview: TripOverview, on_delete: EventHandler<()>) -> Element 
                 div { class: "flex shrink-0 items-center gap-1",
                     Link {
                         to: Route::Calendar { trip_id },
-                        class: "flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-700",
+                        class: "flex h-10 w-10 items-center justify-center rounded-xl text-slate-700 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-700",
                         aria_label: "Open trip calendar",
                         title: "Open trip calendar",
                         CalendarDays { size: 19 }
