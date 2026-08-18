@@ -120,6 +120,27 @@ impl Database {
             other => other,
         })
     }
+
+    pub async fn delete_document(&self, document_id: i64) -> Result<(), DbError> {
+        self.call(move |connection| {
+            let changed =
+                connection.execute("DELETE FROM travel_documents WHERE id = ?1", [document_id])?;
+            if changed == 0 {
+                return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| match error {
+            DbError::Operation(tokio_rusqlite::Error::Error(
+                tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows,
+            )) => DbError::NotFound {
+                entity: "document",
+                id: document_id,
+            },
+            other => other,
+        })
+    }
 }
 
 fn attachment_params(

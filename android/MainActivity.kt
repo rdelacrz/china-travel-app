@@ -68,6 +68,16 @@ class MainActivity : WryActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        val webView = appWebView
+        if (webView?.canGoBack() == true) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
         appWebView = webView

@@ -2,7 +2,7 @@ use crate::components::app_shell::AppShell;
 use crate::db::Database;
 use crate::platform::{default_platform, PlatformPort};
 use crate::state::AppServices;
-use crate::views::{Checklist, Documentation, Home};
+use crate::views::{Calendar, Checklist, Documentation, Home};
 use dioxus::prelude::*;
 use std::sync::Arc;
 
@@ -13,6 +13,8 @@ pub enum Route {
     Home {},
     #[route("/trip/:trip_id/checklist")]
     Checklist { trip_id: i64 },
+    #[route("/trip/:trip_id/calendar")]
+    Calendar { trip_id: i64 },
     #[route("/trip/:trip_id/documentation")]
     Documentation { trip_id: i64 },
 }
@@ -68,7 +70,7 @@ fn StartupState(
         div { class: "flex min-h-dvh items-center justify-center px-6 safe-top safe-bottom",
             section { class: "w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm",
                 div { class: "mb-4 text-3xl", "🧧" }
-                h1 { class: "text-xl font-bold text-slate-950", "China Travel Companion" }
+                h1 { class: "text-xl font-bold text-slate-950", "China Travel App" }
                 p { class: "mt-3 text-sm leading-6 text-slate-600", "{state}" }
                 if !detail.is_empty() {
                     p { class: "mt-2 rounded-xl bg-red-50 p-3 text-xs leading-5 text-red-800", "{detail}" }
@@ -125,6 +127,10 @@ mod tests {
         assert_eq!(
             Route::Checklist { trip_id: 42 }.to_string(),
             "/trip/42/checklist"
+        );
+        assert_eq!(
+            Route::Calendar { trip_id: 42 }.to_string(),
+            "/trip/42/calendar"
         );
         assert_eq!(
             Route::Documentation { trip_id: 42 }.to_string(),

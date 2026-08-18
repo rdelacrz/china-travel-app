@@ -23,7 +23,7 @@
   display: flex;
   overflow: hidden;
   width: 18rem;
-  height: 4rem;
+  min-height: 4rem;
   box-sizing: border-box;
   align-items: center;
   justify-content: space-between;
@@ -31,18 +31,15 @@
   border: 1px solid var(--light, var(--primary-color-6))
     var(--dark, var(--primary-color-7));
   border-radius: 0.5rem;
-  margin-top: -4rem;
+  margin-top: 0;
   box-shadow: 0 4px 12px rgb(0 0 0 / 15%);
   filter: var(--light, none)
     var(
       --dark,
       brightness(calc(0.5 + 0.5 * (1 - ((var(--toast-index) + 1) / 4))))
     );
-  opacity: calc(1 - var(--toast-hidden));
-  transform: scale(
-    calc(100% - var(--toast-index) * 5%),
-    calc(100% - var(--toast-index) * 2%)
-  );
+  opacity: 1;
+  transform: none;
   transition: transform 0.2s ease, margin-top 0.2s ease, opacity 0.2s ease;
 
   --toast-hidden: calc(min(max(0, var(--toast-index) - 2), 1));

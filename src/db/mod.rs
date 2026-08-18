@@ -2,12 +2,16 @@ use crate::error::DbError;
 use std::path::{Path, PathBuf};
 use tokio_rusqlite::{Connection, Error as TokioSqliteError};
 
+mod calendar;
 mod checklist;
 mod document;
 mod trip;
 
-const CURRENT_SCHEMA_VERSION: i64 = 1;
-const MIGRATION_SQL: &str = include_str!("../../migrations/0001_initial.sql");
+const CURRENT_SCHEMA_VERSION: i64 = 2;
+const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../../migrations/0001_initial.sql")),
+    (2, include_str!("../../migrations/0002_trip_calendar.sql")),
+];
 
 #[derive(Clone, Debug)]
 pub struct Database {
@@ -63,11 +67,17 @@ impl Database {
         }
 
         if version < CURRENT_SCHEMA_VERSION {
-            self.call(|connection| {
+            self.call(move |connection| {
                 let result = (|| {
                     connection.execute_batch("BEGIN IMMEDIATE;")?;
-                    connection.execute_batch(MIGRATION_SQL)?;
-                    connection.execute_batch("PRAGMA user_version = 1;")?;
+                    for (target_version, migration) in MIGRATIONS {
+                        if *target_version > version {
+                            connection.execute_batch(migration)?;
+                            connection.execute_batch(&format!(
+                                "PRAGMA user_version = {target_version};"
+                            ))?;
+                        }
+                    }
                     connection.execute_batch("COMMIT;")
                 })();
 

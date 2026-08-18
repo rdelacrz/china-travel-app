@@ -13,7 +13,7 @@ impl Database {
                 [],
             )?;
             connection.query_row(
-                "SELECT id, name, created_at, updated_at
+                "SELECT id, name, start_date, end_date, created_at, updated_at
                  FROM trips ORDER BY id LIMIT 1",
                 [],
                 map_trip,
@@ -26,7 +26,7 @@ impl Database {
         self.call(|connection| {
             let mut statement = connection.prepare(
                 "SELECT
-                    t.id, t.name, t.created_at, t.updated_at,
+                    t.id, t.name, t.start_date, t.end_date, t.created_at, t.updated_at,
                     (SELECT COUNT(*) FROM checklist_items i WHERE i.trip_id = t.id),
                     (SELECT COUNT(*) FROM checklist_items i WHERE i.trip_id = t.id AND i.is_checked = 1),
                     (SELECT COUNT(*) FROM travel_documents d WHERE d.trip_id = t.id)
@@ -36,9 +36,9 @@ impl Database {
             let rows = statement.query_map([], |row| {
                 Ok(TripOverview {
                     trip: map_trip(row)?,
-                    checklist_total: row.get(4)?,
-                    checklist_completed: row.get(5)?,
-                    document_count: row.get(6)?,
+                    checklist_total: row.get(6)?,
+                    checklist_completed: row.get(7)?,
+                    document_count: row.get(8)?,
                 })
             })?;
             rows.collect()
@@ -49,7 +49,8 @@ impl Database {
     pub async fn get_trip(&self, trip_id: i64) -> Result<Trip, DbError> {
         self.call(move |connection| {
             connection.query_row(
-                "SELECT id, name, created_at, updated_at FROM trips WHERE id = ?1",
+                "SELECT id, name, start_date, end_date, created_at, updated_at
+                 FROM trips WHERE id = ?1",
                 [trip_id],
                 map_trip,
             )
@@ -67,16 +68,88 @@ impl Database {
     }
 
     pub async fn create_trip(&self, name: &str) -> Result<Trip, DbError> {
+        self.create_trip_with_dates(name, None, None).await
+    }
+
+    pub async fn create_trip_with_dates(
+        &self,
+        name: &str,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+    ) -> Result<Trip, DbError> {
         let name = crate::domain::Trip::validate_name(name).map_err(DbError::InvalidInput)?;
+        let (start_date, end_date) =
+            Trip::normalize_date_range(start_date, end_date).map_err(DbError::InvalidInput)?;
         self.call(move |connection| {
-            connection.execute("INSERT INTO trips (name) VALUES (?1)", params![name])?;
+            connection.execute(
+                "INSERT INTO trips (name, start_date, end_date) VALUES (?1, ?2, ?3)",
+                params![name, start_date, end_date],
+            )?;
             connection.query_row(
-                "SELECT id, name, created_at, updated_at FROM trips WHERE id = last_insert_rowid()",
+                "SELECT id, name, start_date, end_date, created_at, updated_at
+                 FROM trips WHERE id = last_insert_rowid()",
                 [],
                 map_trip,
             )
         })
         .await
+    }
+
+    pub async fn delete_trip(&self, trip_id: i64) -> Result<(), DbError> {
+        self.call(move |connection| {
+            let changed = connection.execute("DELETE FROM trips WHERE id = ?1", [trip_id])?;
+            if changed == 0 {
+                return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| match error {
+            DbError::Operation(tokio_rusqlite::Error::Error(
+                tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows,
+            )) => DbError::NotFound {
+                entity: "trip",
+                id: trip_id,
+            },
+            other => other,
+        })
+    }
+
+    pub async fn update_trip_dates(
+        &self,
+        trip_id: i64,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+    ) -> Result<Trip, DbError> {
+        let (start_date, end_date) =
+            Trip::normalize_date_range(start_date, end_date).map_err(DbError::InvalidInput)?;
+        self.call(move |connection| {
+            let changed = connection.execute(
+                "UPDATE trips
+                 SET start_date = ?1, end_date = ?2, updated_at = unixepoch()
+                 WHERE id = ?3",
+                params![start_date, end_date, trip_id],
+            )?;
+            if changed == 0 {
+                return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+            }
+            connection.query_row(
+                "SELECT id, name, start_date, end_date, created_at, updated_at
+                 FROM trips WHERE id = ?1",
+                [trip_id],
+                map_trip,
+            )
+        })
+        .await
+        .map_err(|error| match error {
+            DbError::Operation(tokio_rusqlite::Error::Error(
+                tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows,
+            )) => DbError::NotFound {
+                entity: "trip",
+                id: trip_id,
+            },
+            other => other,
+        })
     }
 }
 
@@ -84,7 +157,9 @@ fn map_trip(row: &tokio_rusqlite::rusqlite::Row<'_>) -> tokio_rusqlite::rusqlite
     Ok(Trip {
         id: row.get(0)?,
         name: row.get(1)?,
-        created_at: row.get(2)?,
-        updated_at: row.get(3)?,
+        start_date: row.get(2)?,
+        end_date: row.get(3)?,
+        created_at: row.get(4)?,
+        updated_at: row.get(5)?,
     })
 }

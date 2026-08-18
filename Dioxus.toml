@@ -1,11 +1,11 @@
 [application]
-title = "China Travel Companion"
+title = "China Travel App"
 tailwind_input = "tailwind.css"
 tailwind_output = "assets/tailwind.css"
 android_main_activity = "android/MainActivity.kt"
 
 [web.app]
-title = "China Travel Companion"
+title = "China Travel App"
 
 [android]
 identifier = "com.rdelacruz.chinatravel"

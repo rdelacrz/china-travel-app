@@ -1,101 +1,168 @@
 use dioxus::prelude::*;
-use dioxus_primitives::toast::{
-    self, Toast, ToastCloseButtonProps, ToastContentProps, ToastDescriptionProps, ToastProps,
-    ToastTitleProps,
-};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 #[css_module("/src/components/toast/style.css")]
 struct Styles;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToastType {
+    Success,
+    Error,
+    Warning,
+    Info,
+}
+
+impl ToastType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Error => "error",
+            Self::Warning => "warning",
+            Self::Info => "info",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ToastOptions {
+    description: Option<String>,
+    duration: Option<Duration>,
+    permanent: bool,
+}
+
+impl ToastOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn duration(mut self, duration: Duration) -> Self {
+        self.duration = Some(duration);
+        self
+    }
+
+    pub fn permanent(mut self, permanent: bool) -> Self {
+        self.permanent = permanent;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToastRecord {
+    id: usize,
+    title: String,
+    description: Option<String>,
+    toast_type: ToastType,
+}
+
+#[derive(Clone, Copy)]
+pub struct ToastApi {
+    push: Callback<(String, ToastType, ToastOptions)>,
+}
+
+impl ToastApi {
+    pub fn success(&self, title: String, options: ToastOptions) {
+        self.push.call((title, ToastType::Success, options));
+    }
+
+    pub fn error(&self, title: String, options: ToastOptions) {
+        self.push.call((title, ToastType::Error, options));
+    }
+
+    pub fn warning(&self, title: String, options: ToastOptions) {
+        self.push.call((title, ToastType::Warning, options));
+    }
+
+    pub fn info(&self, title: String, options: ToastOptions) {
+        self.push.call((title, ToastType::Info, options));
+    }
+}
+
+pub fn use_toast() -> ToastApi {
+    use_context()
+}
+
 #[component]
-fn StyledToast(props: ToastProps) -> Element {
-    rsx! {
-        Toast {
-            id: props.id,
-            index: props.index,
-            title: props.title,
-            description: props.description,
-            toast_type: props.toast_type,
-            on_close: props.on_close,
-            permanent: props.permanent,
-            duration: props.duration,
-            class: Styles::dx_toast,
-            attributes: props.attributes,
-            ToastContent {
-                ToastTitle {}
-                ToastDescription {}
+pub fn ToastProvider(children: Element) -> Element {
+    const DEFAULT_DURATION: Duration = Duration::from_secs(5);
+    const MAX_TOASTS: usize = 10;
+    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+
+    let mut toasts = use_signal(VecDeque::<ToastRecord>::new);
+    let push = use_callback(
+        move |(title, toast_type, options): (String, ToastType, ToastOptions)| {
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            let record = ToastRecord {
+                id,
+                title,
+                description: options.description,
+                toast_type,
+            };
+            {
+                let mut records = toasts.write();
+                records.push_back(record);
+                while records.len() > MAX_TOASTS {
+                    records.pop_front();
+                }
             }
-            ToastCloseButton {}
-        }
-    }
-}
 
-#[component]
-fn ToastContent(props: ToastContentProps) -> Element {
-    rsx! {
-        toast::ToastContent {
-            class: Styles::dx_toast_content,
-            attributes: props.attributes,
-            {props.children}
-        }
-    }
-}
+            if !options.permanent {
+                let duration = options.duration.unwrap_or(DEFAULT_DURATION);
+                spawn(async move {
+                    tokio::time::sleep(duration).await;
+                    toasts.write().retain(|toast| toast.id != id);
+                });
+            }
+        },
+    );
+    use_context_provider(|| ToastApi { push });
 
-#[component]
-fn ToastTitle(props: ToastTitleProps) -> Element {
-    rsx! {
-        toast::ToastTitle {
-            class: Styles::dx_toast_title,
-            attributes: props.attributes,
-            children: props.children,
-        }
-    }
-}
-
-#[component]
-fn ToastDescription(props: ToastDescriptionProps) -> Element {
-    rsx! {
-        toast::ToastDescription {
-            class: Styles::dx_toast_description,
-            attributes: props.attributes,
-            children: props.children,
-        }
-    }
-}
-
-#[component]
-fn ToastCloseButton(props: ToastCloseButtonProps) -> Element {
-    rsx! {
-        toast::ToastCloseButton {
-            class: Styles::dx_toast_close,
-            attributes: props.attributes,
-            children: props.children,
-        }
-    }
-}
-
-#[component]
-pub fn ToastProvider(
-    #[props(default = ReadSignal::new(Signal::new(Some(Duration::from_secs(5)))))]
-    default_duration: ReadSignal<Option<Duration>>,
-    #[props(default = ReadSignal::new(Signal::new(10)))] max_toasts: ReadSignal<usize>,
-    #[props(default)] render_toast: Option<Callback<toast::ToastPropsWithOwner, Element>>,
-    #[props(extends = GlobalAttributes)] attributes: Vec<Attribute>,
-    children: Element,
-) -> Element {
-    let render_toast = render_toast.unwrap_or_else(|| {
-        Callback::new(|p: toast::ToastPropsWithOwner| rsx! { StyledToast { ..p } })
-    });
+    let records = toasts.read().iter().cloned().collect::<Vec<_>>();
+    let count = records.len();
 
     rsx! {
-        toast::ToastProvider {
+        {children}
+        div {
             class: Styles::dx_toast_container,
-            default_duration,
-            max_toasts,
-            render_toast,
-            attributes,
-            {children}
+            role: "region",
+            aria_label: "{count} notifications",
+            tabindex: "-1",
+            style: "--toast-count: {count}",
+            ol {
+                for (index, toast) in records.into_iter().rev().enumerate() {
+                    li { key: "toast-{toast.id}",
+                        article {
+                            class: Styles::dx_toast,
+                            "data-type": toast.toast_type.as_str(),
+                            "data-top": if index == 0 { "true" },
+                            "data-toast-even": if index % 2 == 0 { "true" },
+                            "data-toast-odd": if index % 2 == 1 { "true" },
+                            style: "--toast-index: {index}; --toast-padding: 0;",
+                            div { class: Styles::dx_toast_content,
+                                p { class: Styles::dx_toast_title, "{toast.title}" }
+                                if let Some(description) = toast.description {
+                                    p { class: Styles::dx_toast_description, "{description}" }
+                                }
+                            }
+                            button {
+                                class: Styles::dx_toast_close,
+                                r#type: "button",
+                                aria_label: "Dismiss notification",
+                                onpointerup: move |_| {
+                                    toasts.write().retain(|record| record.id != toast.id);
+                                },
+                                "×"
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -103,32 +170,24 @@ pub fn ToastProvider(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dioxus_primitives::toast::{use_toast, ToastOptions};
 
     #[component]
     fn TriggerToast() -> Element {
-        let toast_api = use_toast();
+        let toast = use_toast();
         use_hook(move || {
-            toast_api.success(
+            toast.success(
                 "Saved".to_string(),
                 ToastOptions::new()
                     .description("Everything synced")
                     .permanent(true),
             );
         });
-
         rsx! {}
     }
 
     #[test]
-    fn styled_toast_preserves_primitive_fallback_children() {
-        let mut dom = VirtualDom::new(|| {
-            rsx! {
-                ToastProvider {
-                    TriggerToast {}
-                }
-            }
-        });
+    fn provider_renders_a_styled_notification_without_browser_shortcuts() {
+        let mut dom = VirtualDom::new(|| rsx! { ToastProvider { TriggerToast {} } });
         dom.rebuild_in_place();
         dom.mark_all_dirty();
         dom.render_immediate_to_vec();
@@ -136,6 +195,6 @@ mod tests {
 
         assert!(html.contains("Saved"));
         assert!(html.contains("Everything synced"));
-        assert!(html.contains('\u{00d7}') || html.contains("&#215;") || html.contains("&times;"));
+        assert!(html.contains('×') || html.contains("&#215;") || html.contains("&times;"));
     }
 }

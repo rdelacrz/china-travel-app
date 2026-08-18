@@ -4,7 +4,8 @@ Android-first local travel management app for China, built with Rust, Dioxus 0.7
 
 ## Features
 
-- Home overview with persisted trips, checklist/document counts, progress, and zero-state summaries.
+- Home overview with persisted trips, checklist/document counts, progress, travel-date summaries, and zero-state summaries.
+- Per-trip calendar with editable trip dates, month navigation, and date-range events shown directly on the calendar.
 - Checklist items with immediate checkbox persistence, inline edit-on-tap, blur/keyboard-Go commits, validation, and AlertDialog delete confirmation.
 - Documentation notes with right-side Sheet add/edit form, multiline descriptions, linkified HTTP(S) URLs, view/edit/open-file actions, and optional Android Storage Access Framework attachments.
 - Android bridge for app-data directory lookup, `ACTION_OPEN_DOCUMENT`, persisted read grants, `ACTION_VIEW` for attachments, browser URL opening, and post-commit grant release.
@@ -14,13 +15,13 @@ Android-first local travel management app for China, built with Rust, Dioxus 0.7
 
 ```text
 android/MainActivity.kt       Android WebView bridge and SAF activity result handling
-migrations/0001_initial.sql  SQLite schema
+migrations/                  Versioned SQLite schema migrations
 src/app.rs                    Routes, startup, service context, shell integration
 src/components/               Generated Dioxus Components plus behaviorful panes
 src/db/                       SQLite connection, migration, and repositories
-src/domain/                   Validated trip/checklist/document models
+src/domain/                   Validated trip/checklist/document/calendar models
 src/platform/                 Android protocol/implementation and host fake
-src/views/                    home.rs, checklist.rs, documentation.rs
+src/views/                    home.rs, checklist.rs, calendar.rs, documentation.rs
  tests/                       Database, bridge protocol, and platform workflow tests
 ```
 

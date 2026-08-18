@@ -262,6 +262,13 @@ rm -f -- \
     "$GENERATED_RES_DIR/drawable/ic_launcher_background.xml" \
     "$GENERATED_RES_DIR/drawable-v24/ic_launcher_foreground.xml"
 
+# Dioxus derives the Android resource label from the package name and can
+# collapse spaces. Override it explicitly so the launcher shows the app name
+# exactly as intended.
+APP_STRINGS_FILE="$GENERATED_RES_DIR/values/strings.xml"
+[[ -f "$APP_STRINGS_FILE" ]] || die "Generated Android strings resource not found: $APP_STRINGS_FILE"
+python3 -c 'from pathlib import Path; import sys; p = Path(sys.argv[1]); p.write_text(p.read_text().replace("ChinaTravelApp", "China Travel App"))' "$APP_STRINGS_FILE"
+
 printf 'Rebuilding APK with the configured launcher icon...\n'
 (
     cd "$ANDROID_GRADLE_DIR"

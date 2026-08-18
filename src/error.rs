@@ -6,6 +6,12 @@ pub enum ValidationError {
     BlankChecklistText,
     #[error("document name cannot be blank")]
     BlankDocumentName,
+    #[error("event name cannot be blank")]
+    BlankCalendarEventName,
+    #[error("date must use the YYYY-MM-DD format")]
+    InvalidCalendarDate,
+    #[error("end date cannot be earlier than start date")]
+    CalendarEndBeforeStart,
     #[error("only HTTP and HTTPS links can be opened")]
     UnsupportedUrlScheme,
 }

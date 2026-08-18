@@ -1,6 +1,7 @@
 use super::Database;
 use crate::domain::ChecklistItem;
 use crate::error::DbError;
+use std::collections::HashSet;
 use tokio_rusqlite::rusqlite::params;
 
 impl Database {
@@ -130,6 +131,81 @@ impl Database {
             )) => DbError::NotFound {
                 entity: "checklist item",
                 id: item_id,
+            },
+            other => other,
+        })
+    }
+
+    pub async fn reorder_checklist_items(
+        &self,
+        trip_id: i64,
+        ordered_ids: Vec<i64>,
+    ) -> Result<(), DbError> {
+        self.call(move |connection| {
+            let result = (|| {
+                let expected: i64 = connection.query_row(
+                    "SELECT COUNT(*) FROM checklist_items WHERE trip_id = ?1",
+                    [trip_id],
+                    |row| row.get(0),
+                )?;
+                if expected != ordered_ids.len() as i64 {
+                    return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+                }
+
+                let mut seen = HashSet::with_capacity(ordered_ids.len());
+                for item_id in &ordered_ids {
+                    if !seen.insert(*item_id) {
+                        return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+                    }
+                    let exists: i64 = connection.query_row(
+                        "SELECT COUNT(*) FROM checklist_items WHERE id = ?1 AND trip_id = ?2",
+                        params![item_id, trip_id],
+                        |row| row.get(0),
+                    )?;
+                    if exists != 1 {
+                        return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
+                    }
+                }
+
+                connection.execute_batch("BEGIN IMMEDIATE;")?;
+                let outcome = (|| {
+                    let offset = ordered_ids.len() as i64 + 1;
+                    connection.execute(
+                        "UPDATE checklist_items
+                         SET sort_order = sort_order + ?1, updated_at = unixepoch()
+                         WHERE trip_id = ?2",
+                        params![offset, trip_id],
+                    )?;
+                    for (sort_order, item_id) in ordered_ids.iter().enumerate() {
+                        connection.execute(
+                            "UPDATE checklist_items SET sort_order = ?1, updated_at = unixepoch()
+                             WHERE id = ?2 AND trip_id = ?3",
+                            params![sort_order as i64, item_id, trip_id],
+                        )?;
+                    }
+                    Ok(())
+                })();
+
+                if outcome.is_err() {
+                    let _ = connection.execute_batch("ROLLBACK;");
+                } else {
+                    connection.execute_batch("COMMIT;")?;
+                }
+                outcome
+            })();
+
+            if result.is_err() {
+                let _ = connection.execute_batch("ROLLBACK;");
+            }
+            result
+        })
+        .await
+        .map_err(|error| match error {
+            DbError::Operation(tokio_rusqlite::Error::Error(
+                tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows,
+            )) => DbError::NotFound {
+                entity: "checklist ordering",
+                id: trip_id,
             },
             other => other,
         })

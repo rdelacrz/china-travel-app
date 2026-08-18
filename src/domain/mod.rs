@@ -1,7 +1,12 @@
+mod calendar;
 mod checklist;
 mod document;
 mod trip;
 
+pub use calendar::{
+    date_range_label, normalize_date_range, normalize_optional_date, CalendarDate, CalendarEvent,
+    NewCalendarEvent, UpdateCalendarEvent,
+};
 pub use checklist::ChecklistItem;
 pub use document::{AttachmentRef, NewTravelDocument, TravelDocument, UpdateTravelDocument};
 pub use trip::{Trip, TripOverview};

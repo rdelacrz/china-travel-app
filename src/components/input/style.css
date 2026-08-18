@@ -1,11 +1,10 @@
 /* Input Styles */
 .dx-input {
   position: relative;
-  display: flex;
+  display: block;
+  width: 100%;
+  min-height: 3rem;
   box-sizing: border-box;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
   padding: 0.25rem;
   padding: 8px 12px;
   border: none;

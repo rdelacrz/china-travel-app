@@ -1,11 +1,13 @@
-use crate::components::button::{Button, ButtonSize};
+use crate::app::Route;
+use crate::components::button::Button;
+use crate::components::confirm_delete::ConfirmDocumentDeleteDialog;
 use crate::components::document_pane::DocumentPane;
 use crate::components::document_sheet::{DocumentSheet, DocumentSheetMode};
+use crate::components::toast::{use_toast, ToastOptions};
 use crate::domain::{AttachmentRef, NewTravelDocument, TravelDocument, UpdateTravelDocument};
 use crate::platform::PickDocumentOutcome;
 use crate::state::{use_database, use_platform, use_revision};
 use dioxus::prelude::*;
-use dioxus_primitives::toast::{use_toast, ToastOptions};
 
 #[component]
 pub fn Documentation(trip_id: i64) -> Element {
@@ -34,6 +36,7 @@ pub fn Documentation(trip_id: i64) -> Element {
     let mut saving = use_signal(|| false);
     let mut picking = use_signal(|| false);
     let mut expanded = use_signal(|| None::<i64>);
+    let mut pending_delete = use_signal(|| None::<TravelDocument>);
 
     let reset_form = use_callback(move |_: ()| {
         sheet_mode.set(None);
@@ -57,7 +60,7 @@ pub fn Documentation(trip_id: i64) -> Element {
 
     let attach_file = use_callback({
         let platform = platform.clone();
-        move |_: MouseEvent| {
+        move |_: ()| {
             if picking() || saving() {
                 return;
             }
@@ -82,7 +85,7 @@ pub fn Documentation(trip_id: i64) -> Element {
     let save_document = use_callback({
         let database = database.clone();
         let platform = platform.clone();
-        move |_: MouseEvent| {
+        move |_: ()| {
             if saving() || picking() {
                 return;
             }
@@ -177,6 +180,35 @@ pub fn Documentation(trip_id: i64) -> Element {
         }
     });
 
+    let delete_document = use_callback({
+        let database = database.clone();
+        let platform = platform.clone();
+        move |_: ()| {
+            let Some(document) = pending_delete() else {
+                return;
+            };
+            pending_delete.set(None);
+            let document_id = document.id;
+            let attachment_uri = document.attachment.map(|attachment| attachment.uri);
+            let database = database.clone();
+            let platform = platform.clone();
+            spawn(async move {
+                match database.delete_document(document_id).await {
+                    Ok(()) => {
+                        if let Some(uri) = attachment_uri {
+                            let _ = platform.release_read_permission(&uri).await;
+                        }
+                        revision.set(revision() + 1);
+                    }
+                    Err(error) => toast.error(
+                        "Document could not be deleted".to_string(),
+                        ToastOptions::default().description(error.to_string()),
+                    ),
+                }
+            });
+        }
+    });
+
     let view = match &*data.value().read_unchecked() {
         None => {
             rsx! { p { class: "rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600", "Loading documents…" } }
@@ -185,14 +217,14 @@ pub fn Documentation(trip_id: i64) -> Element {
             section { class: "rounded-2xl border border-amber-200 bg-amber-50 p-5",
                 h1 { class: "text-lg font-bold text-amber-950", "Trip not found" }
                 p { class: "mt-2 text-sm leading-6 text-amber-900", "This documentation route no longer points to a saved trip." }
-                a { href: "/", class: "mt-4 inline-flex min-h-12 items-center rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white", "Back to trips" }
+                Link { to: Route::Home {}, class: "mt-4 inline-flex min-h-12 items-center rounded-xl bg-amber-900 px-4 text-sm font-semibold text-white", "Back to trips" }
             }
         },
         Some(Err(error)) => rsx! {
             section { class: "rounded-2xl border border-red-200 bg-red-50 p-5",
                 h1 { class: "text-lg font-bold text-red-900", "Documentation unavailable" }
                 p { class: "mt-2 text-sm leading-6 text-red-800", "{error}" }
-                Button { class: "mt-4 min-h-12", onclick: move |_| data.restart(), "Retry" }
+                Button { class: "mt-4 min-h-12", on_press: move |_| data.restart(), "Retry" }
             }
         },
         Some(Ok((trip, documents))) => rsx! {
@@ -203,8 +235,8 @@ pub fn Documentation(trip_id: i64) -> Element {
                         h1 { class: "mt-1 text-2xl font-bold tracking-tight text-slate-950", "{trip.name}" }
                         p { class: "mt-2 text-sm text-slate-600", "Notes and files for your China trip." }
                     }
-                    a {
-                        href: "/",
+                    Link {
+                        to: Route::Home {},
                         class: "flex min-h-12 items-center rounded-xl px-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-red-700",
                         "Back"
                     }
@@ -221,6 +253,7 @@ pub fn Documentation(trip_id: i64) -> Element {
                             {
                                 let document_id = document.id;
                                 let document_for_edit = document.clone();
+                                let document_for_delete = document.clone();
                                 let document_for_file = document.clone();
                                 rsx! {
                                     li { key: "document-{document_id}",
@@ -232,6 +265,7 @@ pub fn Documentation(trip_id: i64) -> Element {
                                                 expanded.set(if expanded() == Some(document_id) { None } else { Some(document_id) });
                                             },
                                             on_edit: move |_| edit_document.call(document_for_edit.clone()),
+                                            on_delete: move |_| pending_delete.set(Some(document_for_delete.clone())),
                                             on_open_file: move |_| {
                                                 if let Some(attachment) = document_for_file.attachment.clone() {
                                                     open_file.call(attachment);
@@ -247,10 +281,10 @@ pub fn Documentation(trip_id: i64) -> Element {
                 }
                 div { class: "fixed inset-x-0 bottom-0 z-10 border-t border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur",
                     div { class: "mx-auto max-w-3xl",
-                        Button {
-                            size: ButtonSize::Lg,
-                            class: "min-h-12 w-full",
-                            onclick: move |_| {
+                        button {
+                            r#type: "button",
+                            class: "flex min-h-12 w-full items-center justify-center rounded-xl bg-red-700 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700",
+                            onpointerup: move |_| {
                                 form_name.set(String::new());
                                 form_description.set(String::new());
                                 form_attachment.set(None);
@@ -273,10 +307,15 @@ pub fn Documentation(trip_id: i64) -> Element {
                     validation_error: form_error(),
                     on_name_change: move |event: FormEvent| form_name.set(event.value()),
                     on_description_change: move |event: FormEvent| form_description.set(event.value()),
-                    on_attach: move |event: MouseEvent| attach_file.call(event),
+                    on_attach: move |_| attach_file.call(()),
                     on_remove_attachment: move |_| form_attachment.set(None),
-                    on_save: move |event: MouseEvent| save_document.call(event),
+                    on_save: move |_| save_document.call(()),
                     on_cancel: move |_| reset_form.call(()),
+                }
+                ConfirmDocumentDeleteDialog {
+                    document: pending_delete(),
+                    on_confirm: move |_| delete_document.call(()),
+                    on_cancel: move |_| pending_delete.set(None),
                 }
             }
         },

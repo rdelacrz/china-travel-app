@@ -68,7 +68,9 @@ impl FakePlatform {
 #[async_trait(?Send)]
 impl PlatformPort for FakePlatform {
     async fn app_data_directory(&self) -> Result<PathBuf, PlatformError> {
-        Ok(PathBuf::from(":memory:"))
+        Ok(std::env::var_os("CHINA_TRAVEL_WATCH_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(":memory:")))
     }
 
     async fn pick_document(

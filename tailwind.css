@@ -36,6 +36,44 @@
     }
 }
 
+@layer components {
+    .travel-checkbox {
+        display: inline-flex;
+        flex: 0 0 1.5rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 2px solid #94a3b8;
+        border-radius: 0.5rem;
+        background: #ffffff;
+        color: #ffffff;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgb(15 23 42 / 12%);
+    }
+
+    .travel-checkbox[data-state="checked"] {
+        border-color: #b91c1c;
+        background: #b91c1c;
+    }
+
+    .travel-checkbox:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .travel-checkbox:focus-visible {
+        outline: 3px solid rgb(185 28 28 / 30%);
+        outline-offset: 2px;
+    }
+
+    .travel-checkbox > span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
 @utility safe-bottom {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 }
