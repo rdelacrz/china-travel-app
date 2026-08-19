@@ -40,8 +40,14 @@ impl Database {
 
     pub async fn delete_calendar_event(&self, event_id: i64) -> Result<(), DbError> {
         self.call(move |connection| {
-            let changed =
-                connection.execute("DELETE FROM calendar_events WHERE id = ?1", [event_id])?;
+            let changed = connection.execute(
+                "DELETE FROM calendar_events
+                 WHERE id = ?1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM app_settings WHERE key = 'safe_mode' AND value = 'true'
+                   )",
+                [event_id],
+            )?;
             if changed == 0 {
                 return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
             }

@@ -11,6 +11,24 @@
   },
   {
     "version": 1,
+    "request_id": "fixture-create-backup",
+    "operation": {
+      "kind": "create_document",
+      "file_name": "china_travel_app_backup.json",
+      "mime_type": "application/json",
+      "content_base64": "e30="
+    }
+  },
+  {
+    "version": 1,
+    "request_id": "fixture-read-backup",
+    "operation": {
+      "kind": "read_text_document",
+      "uri": "content://provider/document/backup"
+    }
+  },
+  {
+    "version": 1,
     "request_id": "fixture-open-document",
     "operation": {
       "kind": "open_document",

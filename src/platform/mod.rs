@@ -27,6 +27,13 @@ pub trait PlatformPort: Send + Sync {
         &self,
         prefer_downloads: bool,
     ) -> Result<PickDocumentOutcome, PlatformError>;
+    async fn create_document(
+        &self,
+        file_name: &str,
+        mime_type: &str,
+        content: &[u8],
+    ) -> Result<bool, PlatformError>;
+    async fn read_text_document(&self, uri: &str) -> Result<String, PlatformError>;
     async fn open_document(&self, attachment: &AttachmentRef) -> Result<(), PlatformError>;
     async fn open_url(&self, url: &str) -> Result<(), PlatformError>;
     async fn release_read_permission(&self, uri: &str) -> Result<(), PlatformError>;

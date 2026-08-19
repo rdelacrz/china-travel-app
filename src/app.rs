@@ -50,6 +50,8 @@ fn ReadyApp(services: AppServices) -> Element {
     use_context_provider(|| services.platform.clone());
     let revision = use_signal(|| 0_u64);
     use_context_provider(|| revision);
+    let safe_mode = use_signal(|| services.safe_mode);
+    use_context_provider(|| safe_mode);
 
     rsx! {
         AppStyles {}
@@ -114,7 +116,12 @@ async fn initialize_services(
         tokio::fs::create_dir_all(&data_directory).await?;
         Database::open(data_directory.join("china-travel.sqlite3")).await?
     };
-    Ok(AppServices { database, platform })
+    let safe_mode = database.get_safe_mode_enabled().await.unwrap_or(false);
+    Ok(AppServices {
+        database,
+        platform,
+        safe_mode,
+    })
 }
 
 #[cfg(test)]

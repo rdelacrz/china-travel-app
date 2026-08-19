@@ -17,6 +17,8 @@ struct FakePlatformState {
     opened_urls: Vec<String>,
     released_uris: Vec<String>,
     open_error: Option<PlatformError>,
+    created_documents: Vec<(String, String, Vec<u8>)>,
+    text_documents: std::collections::HashMap<String, String>,
 }
 
 impl FakePlatform {
@@ -63,6 +65,22 @@ impl FakePlatform {
             .released_uris
             .clone()
     }
+
+    pub fn set_text_document(&self, uri: &str, content: &str) {
+        self.state
+            .lock()
+            .expect("fake platform lock poisoned")
+            .text_documents
+            .insert(uri.to_string(), content.to_string());
+    }
+
+    pub fn created_documents(&self) -> Vec<(String, String, Vec<u8>)> {
+        self.state
+            .lock()
+            .expect("fake platform lock poisoned")
+            .created_documents
+            .clone()
+    }
 }
 
 #[async_trait(?Send)]
@@ -84,6 +102,34 @@ impl PlatformPort for FakePlatform {
             .next_pick
             .take()
             .unwrap_or(PickDocumentOutcome::Cancelled))
+    }
+
+    async fn create_document(
+        &self,
+        file_name: &str,
+        mime_type: &str,
+        content: &[u8],
+    ) -> Result<bool, PlatformError> {
+        self.state
+            .lock()
+            .expect("fake platform lock poisoned")
+            .created_documents
+            .push((
+                file_name.to_string(),
+                mime_type.to_string(),
+                content.to_vec(),
+            ));
+        Ok(true)
+    }
+
+    async fn read_text_document(&self, uri: &str) -> Result<String, PlatformError> {
+        self.state
+            .lock()
+            .expect("fake platform lock poisoned")
+            .text_documents
+            .get(uri)
+            .cloned()
+            .ok_or(PlatformError::AttachmentUnavailable)
     }
 
     async fn open_document(&self, attachment: &AttachmentRef) -> Result<(), PlatformError> {

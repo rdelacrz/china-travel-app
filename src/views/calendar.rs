@@ -2,7 +2,7 @@ use crate::app::Route;
 use crate::components::button::Button;
 use crate::components::toast::{use_toast, ToastOptions};
 use crate::domain::{CalendarDate, CalendarEvent, NewCalendarEvent, Trip, UpdateCalendarEvent};
-use crate::state::{use_database, use_revision};
+use crate::state::{use_database, use_revision, use_safe_mode};
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2};
 
@@ -88,6 +88,7 @@ impl CalendarMonth {
 pub fn Calendar(trip_id: i64) -> Element {
     let database = use_database();
     let mut revision = use_revision();
+    let safe_mode = use_safe_mode();
     let toast = use_toast();
     let mut data = use_resource({
         let database = database.clone();
@@ -280,7 +281,7 @@ pub fn Calendar(trip_id: i64) -> Element {
     let delete_event = use_callback({
         let database = database.clone();
         move |event_id: i64| {
-            if removing_event().is_some() {
+            if safe_mode() || removing_event().is_some() {
                 return;
             }
             removing_event.set(Some(event_id));
@@ -405,12 +406,13 @@ pub fn Calendar(trip_id: i64) -> Element {
                                     let is_today = date == today;
                                     let is_trip_start = trip_start == Some(date);
                                     let is_trip_end = trip_end == Some(date);
+                                    let is_trip_day = trip_date_range_includes(trip_start, trip_end, date);
                                     let day_events = events
                                         .iter()
                                         .filter(|event| event_occurs_on(event, date))
                                         .cloned()
                                         .collect::<Vec<_>>();
-                                    let cell_class = if is_trip_start || is_trip_end {
+                                    let cell_class = if is_trip_day {
                                         "min-h-22 border-b border-r border-slate-100 bg-red-50/60 p-1.5 sm:min-h-28 sm:p-2"
                                     } else {
                                         "min-h-22 border-b border-r border-slate-100 bg-white p-1.5 sm:min-h-28 sm:p-2"
@@ -479,17 +481,19 @@ pub fn Calendar(trip_id: i64) -> Element {
                                                             onpointerup: move |_| open_edit_event.call(event_for_edit.clone()),
                                                             Pencil { size: 18 }
                                                         }
-                                                        button {
-                                                            r#type: "button",
-                                                            class: "flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50",
-                                                            aria_label: "Remove {event.name}",
-                                                            title: "Remove event",
-                                                            disabled: removing_event().is_some(),
-                                                            onpointerup: move |_| delete_event.call(event_id),
-                                                            if is_removing {
-                                                                span { class: "text-xs font-semibold", "…" }
-                                                            } else {
-                                                                Trash2 { size: 18 }
+                                                        if !safe_mode() {
+                                                            button {
+                                                                r#type: "button",
+                                                                class: "flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50",
+                                                                aria_label: "Remove {event.name}",
+                                                                title: "Remove event",
+                                                                disabled: removing_event().is_some(),
+                                                                onpointerup: move |_| delete_event.call(event_id),
+                                                                if is_removing {
+                                                                    span { class: "text-xs font-semibold", "…" }
+                                                                } else {
+                                                                    Trash2 { size: 18 }
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -768,6 +772,16 @@ fn event_occurs_on(event: &CalendarEvent, date: CalendarDate) -> bool {
     start_date <= date && date <= end_date
 }
 
+fn trip_date_range_includes(
+    start_date: Option<CalendarDate>,
+    end_date: Option<CalendarDate>,
+    date: CalendarDate,
+) -> bool {
+    start_date
+        .zip(end_date)
+        .is_some_and(|(start, end)| start <= date && date <= end)
+}
+
 fn abbreviate_event_name(name: &str) -> String {
     const MAX_CHARS: usize = 11;
     let mut characters = name.chars();
@@ -847,6 +861,24 @@ mod tests {
         ));
         assert!(!event_occurs_on(
             &event,
+            CalendarDate::parse("2027-04-05").unwrap()
+        ));
+    }
+
+    #[test]
+    fn trip_highlight_covers_inclusive_date_range() {
+        let start = CalendarDate::parse("2027-04-02").unwrap();
+        let end = CalendarDate::parse("2027-04-04").unwrap();
+        assert!(trip_date_range_includes(Some(start), Some(end), start));
+        assert!(trip_date_range_includes(
+            Some(start),
+            Some(end),
+            CalendarDate::parse("2027-04-03").unwrap()
+        ));
+        assert!(trip_date_range_includes(Some(start), Some(end), end));
+        assert!(!trip_date_range_includes(
+            Some(start),
+            Some(end),
             CalendarDate::parse("2027-04-05").unwrap()
         ));
     }

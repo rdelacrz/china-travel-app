@@ -1,6 +1,7 @@
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
 use crate::components::linked_text::LinkedText;
 use crate::domain::TravelDocument;
+use crate::state::use_safe_mode;
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{ChevronDown, ChevronUp, ExternalLink, Paperclip, Pencil, Trash2};
 
@@ -15,6 +16,7 @@ pub fn DocumentPane(
     on_open_file: EventHandler<()>,
     on_open_url: EventHandler<String>,
 ) -> Element {
+    let safe_mode = use_safe_mode();
     let attachment_label = document
         .attachment
         .as_ref()
@@ -85,15 +87,17 @@ pub fn DocumentPane(
                         on_press: move |_| on_edit.call(()),
                         Pencil { size: 18 }
                     }
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Icon,
-                        class: "text-slate-400 hover:bg-red-50 hover:text-red-700",
-                        aria_label: "Delete document",
-                        title: "Delete document",
-                        disabled: busy,
-                        on_press: move |_| on_delete.call(()),
-                        Trash2 { size: 18 }
+                    if !safe_mode() {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            size: ButtonSize::Icon,
+                            class: "text-slate-400 hover:bg-red-50 hover:text-red-700",
+                            aria_label: "Delete document",
+                            title: "Delete document",
+                            disabled: busy,
+                            on_press: move |_| on_delete.call(()),
+                            Trash2 { size: 18 }
+                        }
                     }
                 }
             }

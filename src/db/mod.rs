@@ -2,15 +2,20 @@ use crate::error::DbError;
 use std::path::{Path, PathBuf};
 use tokio_rusqlite::{Connection, Error as TokioSqliteError};
 
+pub mod backup;
 mod calendar;
 mod checklist;
 mod document;
+mod settings;
 mod trip;
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+pub use backup::AppBackup;
+
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("../../migrations/0001_initial.sql")),
     (2, include_str!("../../migrations/0002_trip_calendar.sql")),
+    (3, include_str!("../../migrations/0003_settings.sql")),
 ];
 
 #[derive(Clone, Debug)]

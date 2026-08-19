@@ -227,4 +227,106 @@ async fn version_one_database_upgrades_to_include_trip_dates_and_calendar_events
         database.list_calendar_events(trip.id).await.unwrap(),
         vec![event]
     );
+    assert!(!database.get_safe_mode_enabled().await.unwrap());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn backup_round_trip_replaces_existing_data_and_preserves_all_entities() {
+    let source = Database::open_in_memory().await.unwrap();
+    let trip = source
+        .create_trip_with_dates("Xi'an", Some("2028-03-01"), Some("2028-03-05"))
+        .await
+        .unwrap();
+    source
+        .add_checklist_item(trip.id, "Passport")
+        .await
+        .unwrap();
+    source
+        .create_document(
+            NewTravelDocument::new(
+                trip.id,
+                "Train ticket",
+                "Carriage 8".to_string(),
+                Some(
+                    AttachmentRef::new(
+                        "content://tickets/xian".to_string(),
+                        Some("ticket.pdf".to_string()),
+                        Some("application/pdf".to_string()),
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    source
+        .create_calendar_event(
+            NewCalendarEvent::new(trip.id, "Terracotta Army", "2028-03-02", "2028-03-02").unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let backup = source.export_full_backup().await.unwrap();
+    assert_eq!(backup.version, 1);
+    assert_eq!(backup.trips.len(), 1);
+    let json = serde_json::to_string_pretty(&backup).unwrap();
+    let decoded = serde_json::from_str(&json).unwrap();
+
+    let destination = Database::open_in_memory().await.unwrap();
+    destination.create_trip("Old data").await.unwrap();
+    destination.import_full_backup(&decoded).await.unwrap();
+
+    let restored = destination.list_trip_overviews().await.unwrap();
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored[0].trip.name, "Xi'an");
+    assert_eq!(
+        destination
+            .list_checklist_items(trip.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(destination.list_documents(trip.id).await.unwrap().len(), 1);
+    assert_eq!(
+        destination
+            .list_calendar_events(trip.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn safe_mode_persists_and_blocks_every_delete_path() {
+    let database = Database::open_in_memory().await.unwrap();
+    let trip = database.create_trip("Protected trip").await.unwrap();
+    let item = database.add_checklist_item(trip.id, "Visa").await.unwrap();
+    let document = database
+        .create_document(NewTravelDocument::new(trip.id, "Visa copy", String::new(), None).unwrap())
+        .await
+        .unwrap();
+    let event = database
+        .create_calendar_event(
+            NewCalendarEvent::new(trip.id, "Flight", "2028-01-01", "2028-01-01").unwrap(),
+        )
+        .await
+        .unwrap();
+
+    database.set_safe_mode_enabled(true).await.unwrap();
+    assert!(database.get_safe_mode_enabled().await.unwrap());
+    assert!(database.delete_trip(trip.id).await.is_err());
+    assert!(database.delete_checklist_item(item.id).await.is_err());
+    assert!(database.delete_document(document.id).await.is_err());
+    assert!(database.delete_calendar_event(event.id).await.is_err());
+    assert_eq!(database.list_trip_overviews().await.unwrap().len(), 1);
+
+    database.set_safe_mode_enabled(false).await.unwrap();
+    database.delete_calendar_event(event.id).await.unwrap();
+    database.delete_document(document.id).await.unwrap();
+    database.delete_checklist_item(item.id).await.unwrap();
+    database.delete_trip(trip.id).await.unwrap();
+    assert!(database.list_trip_overviews().await.unwrap().is_empty());
 }

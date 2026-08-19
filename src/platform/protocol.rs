@@ -37,6 +37,14 @@ pub enum NativeOperation {
     PickDocument {
         prefer_downloads: bool,
     },
+    CreateDocument {
+        file_name: String,
+        mime_type: String,
+        content_base64: String,
+    },
+    ReadTextDocument {
+        uri: String,
+    },
     OpenDocument {
         uri: String,
         mime_type: Option<String>,
@@ -89,6 +97,9 @@ pub enum NativeResult {
         uri: String,
         display_name: Option<String>,
         mime_type: Option<String>,
+    },
+    TextDocument {
+        content: String,
     },
     Cancelled,
     Completed,
@@ -150,6 +161,14 @@ mod tests {
             NativeOperation::AppDataDirectory,
             NativeOperation::PickDocument {
                 prefer_downloads: true,
+            },
+            NativeOperation::CreateDocument {
+                file_name: "china_travel_app_backup.json".to_string(),
+                mime_type: "application/json".to_string(),
+                content_base64: "e30=".to_string(),
+            },
+            NativeOperation::ReadTextDocument {
+                uri: "content://provider/backup.json".to_string(),
             },
             NativeOperation::OpenDocument {
                 uri: "content://provider/秘密.pdf".to_string(),

@@ -1,12 +1,14 @@
 use crate::app::Route;
 use crate::components::button::{Button, ButtonSize, ButtonVariant};
 use crate::domain::TripOverview;
+use crate::state::use_safe_mode;
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{CalendarDays, Trash2};
 
 #[component]
 pub fn TripPane(overview: TripOverview, on_delete: EventHandler<()>) -> Element {
     let trip_id = overview.trip.id;
+    let safe_mode = use_safe_mode();
     rsx! {
         article { class: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm",
             div { class: "flex items-center justify-between gap-3",
@@ -21,14 +23,16 @@ pub fn TripPane(overview: TripOverview, on_delete: EventHandler<()>) -> Element 
                         title: "Open trip calendar",
                         CalendarDays { size: 19 }
                     }
-                    Button {
-                        variant: ButtonVariant::Ghost,
-                        size: ButtonSize::Icon,
-                        class: "h-10 w-10 text-slate-400 hover:bg-red-50 hover:text-red-700",
-                        aria_label: "Delete trip",
-                        title: "Delete trip",
-                        on_press: move |_| on_delete.call(()),
-                        Trash2 { size: 18 }
+                    if !safe_mode() {
+                        Button {
+                            variant: ButtonVariant::Ghost,
+                            size: ButtonSize::Icon,
+                            class: "h-10 w-10 text-slate-400 hover:bg-red-50 hover:text-red-700",
+                            aria_label: "Delete trip",
+                            title: "Delete trip",
+                            on_press: move |_| on_delete.call(()),
+                            Trash2 { size: 18 }
+                        }
                     }
                 }
             }

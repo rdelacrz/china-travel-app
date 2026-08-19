@@ -1,4 +1,5 @@
 use crate::app::Route;
+use crate::components::gear_menu::GearMenu;
 use crate::components::toast::ToastProvider;
 use dioxus::prelude::*;
 
@@ -23,7 +24,7 @@ pub fn AppShell() -> Element {
                             }
                             span { class: "truncate text-lg font-bold tracking-tight text-red-700", "China Travel" }
                         }
-                        span { class: "text-xs font-medium uppercase tracking-[0.18em] text-slate-500", "Companion" }
+                        GearMenu {}
                     }
                 }
                 main { class: "mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pb-8 pt-5",

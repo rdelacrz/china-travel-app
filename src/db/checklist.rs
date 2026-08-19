@@ -117,8 +117,14 @@ impl Database {
 
     pub async fn delete_checklist_item(&self, item_id: i64) -> Result<(), DbError> {
         self.call(move |connection| {
-            let changed =
-                connection.execute("DELETE FROM checklist_items WHERE id = ?1", [item_id])?;
+            let changed = connection.execute(
+                "DELETE FROM checklist_items
+                 WHERE id = ?1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM app_settings WHERE key = 'safe_mode' AND value = 'true'
+                   )",
+                [item_id],
+            )?;
             if changed == 0 {
                 return Err(tokio_rusqlite::rusqlite::Error::QueryReturnedNoRows);
             }

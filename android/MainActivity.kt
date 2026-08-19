@@ -18,6 +18,8 @@ import java.nio.charset.StandardCharsets
 class MainActivity : WryActivity() {
     private var appWebView: WebView? = null
     private var pendingPickerRequestId: String? = null
+    private var pendingCreateRequestId: String? = null
+    private var pendingCreateContent: ByteArray? = null
 
     private val pickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -58,13 +60,36 @@ class MainActivity : WryActivity() {
         respond(requestId, resultObject)
     }
 
+    private val createLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val requestId = pendingCreateRequestId ?: return@registerForActivityResult
+        val content = pendingCreateContent
+        pendingCreateRequestId = null
+        pendingCreateContent = null
+        if (result.resultCode != Activity.RESULT_OK || result.data?.data == null) {
+            respond(requestId, resultObject("cancelled"))
+            return@registerForActivityResult
+        }
+        try {
+            contentResolver.openOutputStream(result.data!!.data!!, "wt")?.use { output ->
+                output.write(content ?: ByteArray(0))
+            } ?: throw IllegalStateException("Provider returned no output stream")
+            respond(requestId, resultObject("completed"))
+        } catch (_: Exception) {
+            respond(requestId, errorObject("write_failed", "The backup file could not be written"))
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingPickerRequestId = savedInstanceState?.getString(PENDING_PICKER_KEY)
+        pendingCreateRequestId = savedInstanceState?.getString(PENDING_CREATE_KEY)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString(PENDING_PICKER_KEY, pendingPickerRequestId)
+        outState.putString(PENDING_CREATE_KEY, pendingCreateRequestId)
         super.onSaveInstanceState(outState)
     }
 
@@ -123,6 +148,8 @@ class MainActivity : WryActivity() {
                 respond(requestId, resultObject("app_data_directory").put("path", filesDir.absolutePath))
             }
             "pick_document" -> launchPicker(requestId, operation.optBoolean("prefer_downloads", true))
+            "create_document" -> createDocument(requestId, operation)
+            "read_text_document" -> readTextDocument(requestId, operation)
             "open_document" -> openDocument(requestId, operation)
             "open_url" -> openUrl(requestId, operation)
             "release_read_permission" -> releaseReadPermission(requestId, operation)
@@ -153,6 +180,51 @@ class MainActivity : WryActivity() {
         } catch (_: RuntimeException) {
             pendingPickerRequestId = null
             respond(requestId, errorObject("picker_unavailable", "The document picker could not be opened"))
+        }
+    }
+
+    private fun createDocument(requestId: String, operation: JSONObject) {
+        if (pendingCreateRequestId != null) {
+            respond(requestId, errorObject("picker_busy", "Another file picker is already open"))
+            return
+        }
+        val content = try {
+            Base64.decode(operation.optString("content_base64", ""), Base64.DEFAULT)
+        } catch (_: IllegalArgumentException) {
+            respond(requestId, errorObject("malformed_request", "Backup content was invalid"))
+            return
+        }
+        pendingCreateRequestId = requestId
+        pendingCreateContent = content
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = operation.optString("mime_type", "application/json")
+            putExtra(Intent.EXTRA_TITLE, operation.optString("file_name", "china_travel_app_backup.json"))
+            putExtra(DocumentsContract.EXTRA_INITIAL_URI, downloadsRootUri())
+        }
+        try {
+            createLauncher.launch(intent)
+        } catch (_: RuntimeException) {
+            pendingCreateRequestId = null
+            pendingCreateContent = null
+            respond(requestId, errorObject("picker_unavailable", "The save-file picker could not be opened"))
+        }
+    }
+
+    private fun readTextDocument(requestId: String, operation: JSONObject) {
+        val uri = try { Uri.parse(operation.optString("uri", "")) } catch (_: Exception) { null }
+        if (uri == null) {
+            respond(requestId, errorObject("attachment_unavailable", "The backup URI is invalid"))
+            return
+        }
+        try {
+            val content = contentResolver.openInputStream(uri)
+                ?.bufferedReader(StandardCharsets.UTF_8)
+                ?.use { it.readText() }
+                ?: throw IllegalStateException("Provider returned no input stream")
+            respond(requestId, resultObject("text_document").put("content", content))
+        } catch (_: Exception) {
+            respond(requestId, errorObject("attachment_unavailable", "The backup file could not be read"))
         }
     }
 
@@ -262,6 +334,7 @@ class MainActivity : WryActivity() {
     companion object {
         private const val BRIDGE_NAME = "ChinaTravelBridge"
         private const val PENDING_PICKER_KEY = "chinaTravel.pendingPickerRequestId"
+        private const val PENDING_CREATE_KEY = "chinaTravel.pendingCreateRequestId"
         private const val PROTOCOL_VERSION = 1
     }
 }

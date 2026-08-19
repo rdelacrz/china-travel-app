@@ -4,13 +4,14 @@ use crate::components::confirm_delete::ConfirmTripDeleteDialog;
 use crate::components::toast::{use_toast, ToastOptions};
 use crate::components::trip_pane::TripPane;
 use crate::domain::Trip;
-use crate::state::{use_database, use_revision};
+use crate::state::{use_database, use_revision, use_safe_mode};
 use dioxus::prelude::*;
 
 #[component]
 pub fn Home() -> Element {
     let database = use_database();
     let mut revision = use_revision();
+    let safe_mode = use_safe_mode();
     let toast = use_toast();
     let mut trips = use_resource({
         let database = database.clone();
@@ -31,6 +32,10 @@ pub fn Home() -> Element {
     let delete_trip = use_callback({
         let database = database.clone();
         move |_: ()| {
+            if safe_mode() {
+                pending_delete.set(None);
+                return;
+            }
             let Some(trip) = pending_delete() else {
                 return;
             };
@@ -180,10 +185,12 @@ pub fn Home() -> Element {
                             }
                         }
                     }
-                    ConfirmTripDeleteDialog {
-                        trip: pending_delete(),
-                        on_confirm: move |_| delete_trip.call(()),
-                        on_cancel: move |_| pending_delete.set(None),
+                    if !safe_mode() {
+                        ConfirmTripDeleteDialog {
+                            trip: pending_delete(),
+                            on_confirm: move |_| delete_trip.call(()),
+                            on_cancel: move |_| pending_delete.set(None),
+                        }
                     }
                 }
             }

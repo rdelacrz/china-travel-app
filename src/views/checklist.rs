@@ -3,7 +3,7 @@ use crate::components::button::Button;
 use crate::components::checklist_item_pane::{ChecklistItemPane, DragPoint};
 use crate::components::toast::{use_toast, ToastOptions};
 use crate::domain::ChecklistItem;
-use crate::state::{use_database, use_revision};
+use crate::state::{use_database, use_revision, use_safe_mode};
 use dioxus::prelude::*;
 use dioxus_primitives::checkbox::CheckboxState;
 
@@ -85,6 +85,7 @@ fn active_preview_offset_y(items: &[ChecklistItem], active: &DragState) -> f64 {
 pub fn Checklist(trip_id: i64) -> Element {
     let database = use_database();
     let mut revision = use_revision();
+    let safe_mode = use_safe_mode();
     let toast = use_toast();
     let mut data = use_resource({
         let database = database.clone();
@@ -204,10 +205,11 @@ pub fn Checklist(trip_id: i64) -> Element {
         }
     });
 
+    let delete_database = database.clone();
     let schedule_delete = use_callback({
-        let database = database.clone();
         move |(item, direction): (ChecklistItem, i8)| {
-            if pending_delete().is_some()
+            if safe_mode()
+                || pending_delete().is_some()
                 || dismissing_delete().is_some()
                 || busy_rows.with(|rows| rows.contains(&item.id))
             {
@@ -219,7 +221,7 @@ pub fn Checklist(trip_id: i64) -> Element {
                 id: item.id,
                 direction,
             }));
-            let database = database.clone();
+            let database = delete_database.clone();
             spawn(async move {
                 tokio::time::sleep(Duration::from_millis(260)).await;
                 if delete_token() != token {
@@ -279,6 +281,11 @@ pub fn Checklist(trip_id: i64) -> Element {
             }
             match active.axis {
                 Some(DragAxis::Horizontal) => {
+                    if safe_mode() {
+                        active.x = active.start_x;
+                        drag.set(Some(active));
+                        return;
+                    }
                     let next_x = active.start_x + delta_x.clamp(-160.0, 160.0);
                     active.x = next_x;
                     drag.set(Some(active.clone()));

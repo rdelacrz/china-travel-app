@@ -1,6 +1,7 @@
 mod calendar;
 mod checklist;
 mod document;
+pub mod settings;
 mod trip;
 
 pub use calendar::{

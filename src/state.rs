@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub struct AppServices {
     pub database: Database,
     pub platform: Arc<dyn PlatformPort>,
+    pub safe_mode: bool,
 }
 
 impl PartialEq for AppServices {
@@ -25,4 +26,8 @@ pub fn use_platform() -> Arc<dyn PlatformPort> {
 
 pub fn use_revision() -> Signal<u64> {
     use_context::<Signal<u64>>()
+}
+
+pub fn use_safe_mode() -> Signal<bool> {
+    use_context::<Signal<bool>>()
 }

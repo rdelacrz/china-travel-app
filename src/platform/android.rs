@@ -5,6 +5,7 @@ use super::{PickDocumentOutcome, PlatformPort};
 use crate::domain::AttachmentRef;
 use crate::error::PlatformError;
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use dioxus::prelude::document;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -48,6 +49,38 @@ impl PlatformPort for AndroidPlatform {
             })),
             NativeResult::Cancelled => Ok(PickDocumentOutcome::Cancelled),
             NativeResult::DocumentSelected { .. } => Err(PlatformError::AttachmentUnavailable),
+            other => Err(result_error(other)),
+        }
+    }
+
+    async fn create_document(
+        &self,
+        file_name: &str,
+        mime_type: &str,
+        content: &[u8],
+    ) -> Result<bool, PlatformError> {
+        match self
+            .send(NativeOperation::CreateDocument {
+                file_name: file_name.to_string(),
+                mime_type: mime_type.to_string(),
+                content_base64: STANDARD.encode(content),
+            })
+            .await?
+        {
+            NativeResult::Completed => Ok(true),
+            NativeResult::Cancelled => Ok(false),
+            other => Err(result_error(other)),
+        }
+    }
+
+    async fn read_text_document(&self, uri: &str) -> Result<String, PlatformError> {
+        match self
+            .send(NativeOperation::ReadTextDocument {
+                uri: uri.to_string(),
+            })
+            .await?
+        {
+            NativeResult::TextDocument { content } => Ok(content),
             other => Err(result_error(other)),
         }
     }

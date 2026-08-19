@@ -13,5 +13,6 @@ pub mod checklist_item_pane;
 pub mod confirm_delete;
 pub mod document_pane;
 pub mod document_sheet;
+pub mod gear_menu;
 pub mod linked_text;
 pub mod trip_pane;

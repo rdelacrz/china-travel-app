@@ -6,7 +6,7 @@ use crate::components::document_sheet::{DocumentSheet, DocumentSheetMode};
 use crate::components::toast::{use_toast, ToastOptions};
 use crate::domain::{AttachmentRef, NewTravelDocument, TravelDocument, UpdateTravelDocument};
 use crate::platform::PickDocumentOutcome;
-use crate::state::{use_database, use_platform, use_revision};
+use crate::state::{use_database, use_platform, use_revision, use_safe_mode};
 use dioxus::prelude::*;
 
 #[component]
@@ -14,6 +14,7 @@ pub fn Documentation(trip_id: i64) -> Element {
     let database = use_database();
     let platform = use_platform();
     let mut revision = use_revision();
+    let safe_mode = use_safe_mode();
     let toast = use_toast();
     let mut data = use_resource({
         let database = database.clone();
@@ -184,6 +185,10 @@ pub fn Documentation(trip_id: i64) -> Element {
         let database = database.clone();
         let platform = platform.clone();
         move |_: ()| {
+            if safe_mode() {
+                pending_delete.set(None);
+                return;
+            }
             let Some(document) = pending_delete() else {
                 return;
             };
@@ -312,10 +317,12 @@ pub fn Documentation(trip_id: i64) -> Element {
                     on_save: move |_| save_document.call(()),
                     on_cancel: move |_| reset_form.call(()),
                 }
-                ConfirmDocumentDeleteDialog {
-                    document: pending_delete(),
-                    on_confirm: move |_| delete_document.call(()),
-                    on_cancel: move |_| pending_delete.set(None),
+                if !safe_mode() {
+                    ConfirmDocumentDeleteDialog {
+                        document: pending_delete(),
+                        on_confirm: move |_| delete_document.call(()),
+                        on_cancel: move |_| pending_delete.set(None),
+                    }
                 }
             }
         },
