@@ -39,7 +39,6 @@ pub fn ChecklistItemPane(
     drag_offset_x: f64,
     drag_offset_y: f64,
     horizontal_dragging: bool,
-    active_stack: bool,
     dismissing_direction: Option<i8>,
     on_begin_edit: EventHandler<PointerEvent>,
     on_draft_change: EventHandler<FormEvent>,
@@ -76,7 +75,7 @@ pub fn ChecklistItemPane(
     rsx! {
         li {
             class: "relative min-h-16",
-            style: if active_stack {
+            style: if dragging || dismissing_direction.is_some() {
                 "touch-action: pan-y; z-index: 1000; isolation: isolate;"
             } else {
                 "touch-action: pan-y; z-index: 0;"
@@ -98,7 +97,11 @@ pub fn ChecklistItemPane(
                     }
                 }
                 div {
-                    class: "relative z-10 flex min-h-16 select-none items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-[transform,opacity] duration-200 ease-out",
+                    class: if dragging {
+                        "relative z-10 flex min-h-16 select-none items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-opacity duration-200 ease-out"
+                    } else {
+                        "relative z-10 flex min-h-16 select-none items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-[transform,opacity] duration-200 ease-out"
+                    },
                     style: panel_style,
                     "data-swipe-panel": "true",
                     if checkbox_visible {
@@ -127,8 +130,9 @@ pub fn ChecklistItemPane(
                             button {
                                 class: "min-h-12 w-full rounded-xl px-1 text-left text-base leading-6 text-slate-800 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700",
                                 disabled: busy || dragging,
-                                onpointerup: move |event| {
+                                onpointerdown: move |event| {
                                     if !dragging {
+                                        event.prevent_default();
                                         on_begin_edit.call(event);
                                     }
                                 },

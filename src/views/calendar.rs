@@ -6,7 +6,7 @@ use crate::state::{use_database, use_revision};
 use dioxus::prelude::*;
 use dioxus_icons::lucide::{ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2};
 
-const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CalendarMonth {
@@ -75,7 +75,7 @@ impl CalendarMonth {
             day: 1,
         }
         .days_since_unix_epoch()
-            + 3)
+            + 4)
         .rem_euclid(7) as usize
     }
 
@@ -806,6 +806,26 @@ mod tests {
                 year: 2028,
                 month: 1
             }
+        );
+    }
+
+    #[test]
+    fn month_grid_starts_on_sunday() {
+        assert_eq!(
+            CalendarMonth {
+                year: 2026,
+                month: 8,
+            }
+            .first_weekday(),
+            6
+        );
+        assert_eq!(
+            CalendarMonth {
+                year: 2026,
+                month: 11,
+            }
+            .first_weekday(),
+            0
         );
     }
 

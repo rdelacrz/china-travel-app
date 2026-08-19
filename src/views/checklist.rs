@@ -11,9 +11,11 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 const AXIS_LOCK_DISTANCE: f64 = 8.0;
-const DRAG_RENDER_STEP: f64 = 12.0;
 const DELETE_SWIPE_DISTANCE: f64 = 72.0;
-const REORDER_ROW_DISTANCE: f64 = 84.0;
+// The standard checklist row is 4rem (64px) with Tailwind's `space-y-3` 12px gap.
+// Keeping the preview pitch equal to that layout pitch moves a displaced row into the
+// dragged row's original slot instead of merely near it.
+const REORDER_ROW_DISTANCE: f64 = 76.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DragAxis {
@@ -28,6 +30,8 @@ struct DragState {
     pointer_id: i32,
     start_x: f64,
     start_y: f64,
+    min_y: f64,
+    max_y: f64,
     x: f64,
     y: f64,
     axis: Option<DragAxis>,
@@ -37,6 +41,44 @@ struct DragState {
 struct DismissingDelete {
     id: i64,
     direction: i8,
+}
+
+fn reorder_indices(
+    items: &[ChecklistItem],
+    active: &DragState,
+    pointer_y: f64,
+) -> Option<(usize, usize)> {
+    if active.axis != Some(DragAxis::Vertical) {
+        return None;
+    }
+    let from = items.iter().position(|row| row.id == active.id)?;
+    let shift = ((pointer_y - active.start_y) / REORDER_ROW_DISTANCE).round() as isize;
+    if shift == 0 {
+        return None;
+    }
+    let target = (from as isize + shift).clamp(0, items.len().saturating_sub(1) as isize) as usize;
+    (target != from).then_some((from, target))
+}
+
+fn constrained_vertical_y(active: &DragState, pointer_y: f64) -> f64 {
+    pointer_y.clamp(active.min_y, active.max_y)
+}
+
+fn reorder_preview_items(items: &[ChecklistItem], active: &DragState) -> Vec<ChecklistItem> {
+    let Some((from, target)) = reorder_indices(items, active, active.y) else {
+        return items.to_vec();
+    };
+    let mut preview = items.to_vec();
+    let moved = preview.remove(from);
+    preview.insert(target, moved);
+    preview
+}
+
+fn active_preview_offset_y(items: &[ChecklistItem], active: &DragState) -> f64 {
+    let preview_slot_offset = reorder_indices(items, active, active.y)
+        .map(|(from, target)| (target as isize - from as isize) as f64 * REORDER_ROW_DISTANCE)
+        .unwrap_or_default();
+    (active.y - active.start_y) - preview_slot_offset
 }
 
 #[component]
@@ -238,10 +280,8 @@ pub fn Checklist(trip_id: i64) -> Element {
             match active.axis {
                 Some(DragAxis::Horizontal) => {
                     let next_x = active.start_x + delta_x.clamp(-160.0, 160.0);
-                    if (next_x - active.x).abs() >= DRAG_RENDER_STEP {
-                        active.x = next_x;
-                        drag.set(Some(active.clone()));
-                    }
+                    active.x = next_x;
+                    drag.set(Some(active.clone()));
                     if delta_x.abs() >= DELETE_SWIPE_DISTANCE {
                         drag.set(None);
                         let direction = if delta_x >= 0.0 { 1 } else { -1 };
@@ -249,11 +289,8 @@ pub fn Checklist(trip_id: i64) -> Element {
                     }
                 }
                 Some(DragAxis::Vertical) => {
-                    let next_y = active.start_y + delta_y.clamp(-160.0, 160.0);
-                    if (next_y - active.y).abs() >= DRAG_RENDER_STEP {
-                        active.y = next_y;
-                        drag.set(Some(active));
-                    }
+                    active.y = constrained_vertical_y(&active, point.y);
+                    drag.set(Some(active));
                 }
                 None => {}
             }
@@ -274,25 +311,15 @@ pub fn Checklist(trip_id: i64) -> Element {
             if active.axis != Some(DragAxis::Vertical) || saving_order() {
                 return;
             }
-            let shift = ((point.y - active.start_y) / REORDER_ROW_DISTANCE).round() as isize;
-            if shift == 0 {
-                return;
-            }
             let ordered_ids = {
                 let data = data_for_reorder.value();
                 let data = data.read_unchecked();
                 let Some(Ok((_, items))) = data.as_ref() else {
                     return;
                 };
-                let Some(from) = items.iter().position(|row| row.id == active.id) else {
+                let Some((from, target)) = reorder_indices(items, &active, point.y) else {
                     return;
                 };
-                let target = (from as isize + shift)
-                    .clamp(0, items.len().saturating_sub(1) as isize)
-                    as usize;
-                if target == from {
-                    return;
-                }
                 let mut ordered_ids = items.iter().map(|row| row.id).collect::<Vec<_>>();
                 let moved = ordered_ids.remove(from);
                 ordered_ids.insert(target, moved);
@@ -339,8 +366,27 @@ pub fn Checklist(trip_id: i64) -> Element {
                 .saturating_mul(100)
                 .checked_div(total)
                 .unwrap_or_default();
+            let active_drag = drag();
+            let preview_items = active_drag
+                .as_ref()
+                .map(|active| reorder_preview_items(items, active))
+                .unwrap_or_else(|| items.to_vec());
             rsx! {
                 section { class: "space-y-5 pb-28",
+                    if drag()
+                        .as_ref()
+                        .map(|active| active.axis == Some(DragAxis::Vertical))
+                        .unwrap_or(false)
+                    {
+                        div {
+                            class: "fixed inset-0",
+                            style: "z-index: 900; touch-action: none;",
+                            aria_hidden: "true",
+                            onpointermove: move |event| move_drag.call(DragPoint::from(&event)),
+                            onpointerup: move |event| end_drag.call(DragPoint::from(&event)),
+                            onpointercancel: move |event| end_drag.call(DragPoint::from(&event)),
+                        }
+                    }
                     div { class: "flex items-start justify-between gap-3",
                         div {
                             p { class: "text-sm font-semibold uppercase tracking-[0.16em] text-red-700", "Checklist" }
@@ -374,43 +420,7 @@ pub fn Checklist(trip_id: i64) -> Element {
                         onpointermove: move |event| move_drag.call(DragPoint::from(&event)),
                         onpointerup: move |event| end_drag.call(DragPoint::from(&event)),
                         onpointercancel: move |event| end_drag.call(DragPoint::from(&event)),
-                        onpointerleave: move |event| end_drag.call(DragPoint::from(&event)),
-                        if new_draft().is_some() {
-                            ChecklistItemPane {
-                                item: ChecklistItem {
-                                    id: -1,
-                                    trip_id,
-                                    text: String::new(),
-                                    is_checked: false,
-                                    sort_order: 0,
-                                    created_at: 0,
-                                    updated_at: 0,
-                                },
-                                editing: true,
-                                draft: new_draft().unwrap_or_default(),
-                                busy: busy_rows.with(|rows| rows.contains(&-1)),
-                                checkbox_disabled: true,
-                                validation_error: row_errors.with(|errors| errors.get(&-1).cloned()),
-                                dragging: false,
-                                drag_offset_x: 0.0,
-                                drag_offset_y: 0.0,
-                                horizontal_dragging: false,
-                                active_stack: false,
-                                dismissing_direction: None,
-                                on_begin_edit: move |_| {},
-                                on_draft_change: move |event: FormEvent| new_draft.set(Some(event.value())),
-                                on_commit: move |_| commit.call(-1),
-                                on_keydown: move |event: KeyboardEvent| {
-                                    if event.key() == Key::Enter {
-                                        event.prevent_default();
-                                        commit.call(-1);
-                                    }
-                                },
-                                on_checked_change: move |_| {},
-                                on_drag_start: move |_| {},
-                            }
-                        }
-                        for item in items
+                        for item in preview_items
                             .iter()
                             .filter(|item| {
                                 pending_delete()
@@ -424,7 +434,19 @@ pub fn Checklist(trip_id: i64) -> Element {
                                 let item_id = item.id;
                                 let item_for_edit = item.clone();
                                 let item_for_drag = item.clone();
-                                let active_drag = drag();
+                                let item_index = items
+                                    .iter()
+                                    .position(|candidate| candidate.id == item_id)
+                                    .unwrap_or_default();
+                                let minimum_drag_offset_y =
+                                    -(item_index as f64 * REORDER_ROW_DISTANCE);
+                                let maximum_drag_offset_y = (items
+                                    .len()
+                                    .saturating_sub(1)
+                                    .saturating_sub(item_index)
+                                    as f64)
+                                    * REORDER_ROW_DISTANCE;
+                                let active_drag = active_drag.clone();
                                 let row_dragging = active_drag
                                     .as_ref()
                                     .map(|active| active.id == item_id)
@@ -437,7 +459,7 @@ pub fn Checklist(trip_id: i64) -> Element {
                                 let drag_offset_y = active_drag
                                     .as_ref()
                                     .filter(|active| active.id == item_id)
-                                    .map(|active| active.y - active.start_y)
+                                    .map(|active| active_preview_offset_y(items, active))
                                     .unwrap_or_default();
                                 let horizontal_dragging = active_drag
                                     .as_ref()
@@ -447,7 +469,6 @@ pub fn Checklist(trip_id: i64) -> Element {
                                 let dismissing_direction = dismissing_delete()
                                     .filter(|dismissing| dismissing.id == item_id)
                                     .map(|dismissing| dismissing.direction);
-                                let active_stack = row_dragging || dismissing_direction.is_some();
                                 let order_saving = saving_order();
                                 let checked = checked_overrides
                                     .with(|values| values.get(&item_id).copied())
@@ -468,7 +489,6 @@ pub fn Checklist(trip_id: i64) -> Element {
                                         drag_offset_y,
                                         horizontal_dragging,
                                         dismissing_direction,
-                                        active_stack,
                                         on_begin_edit: move |_| {
                                             drafts
                                                 .write()
@@ -500,6 +520,8 @@ pub fn Checklist(trip_id: i64) -> Element {
                                                     pointer_id: point.pointer_id,
                                                     start_x: point.x,
                                                     start_y: point.y,
+                                                    min_y: point.y + minimum_drag_offset_y,
+                                                    max_y: point.y + maximum_drag_offset_y,
                                                     x: point.x,
                                                     y: point.y,
                                                     axis: None,
@@ -508,6 +530,40 @@ pub fn Checklist(trip_id: i64) -> Element {
                                         },
                                     }
                                 }
+                            }
+                        }
+                        if new_draft().is_some() {
+                            ChecklistItemPane {
+                                item: ChecklistItem {
+                                    id: -1,
+                                    trip_id,
+                                    text: String::new(),
+                                    is_checked: false,
+                                    sort_order: items.len() as i64,
+                                    created_at: 0,
+                                    updated_at: 0,
+                                },
+                                editing: true,
+                                draft: new_draft().unwrap_or_default(),
+                                busy: busy_rows.with(|rows| rows.contains(&-1)),
+                                checkbox_disabled: true,
+                                validation_error: row_errors.with(|errors| errors.get(&-1).cloned()),
+                                dragging: false,
+                                drag_offset_x: 0.0,
+                                drag_offset_y: 0.0,
+                                horizontal_dragging: false,
+                                dismissing_direction: None,
+                                on_begin_edit: move |_| {},
+                                on_draft_change: move |event: FormEvent| new_draft.set(Some(event.value())),
+                                on_commit: move |_| commit.call(-1),
+                                on_keydown: move |event: KeyboardEvent| {
+                                    if event.key() == Key::Enter {
+                                        event.prevent_default();
+                                        commit.call(-1);
+                                    }
+                                },
+                                on_checked_change: move |_| {},
+                                on_drag_start: move |_| {},
                             }
                         }
                     }
@@ -548,4 +604,106 @@ pub fn Checklist(trip_id: i64) -> Element {
     };
 
     rsx! { {view} }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: i64) -> ChecklistItem {
+        ChecklistItem {
+            id,
+            trip_id: 1,
+            text: format!("Item {id}"),
+            is_checked: false,
+            sort_order: id,
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    fn vertical_drag(id: i64, start_y: f64, y: f64) -> DragState {
+        DragState {
+            id,
+            item: item(id),
+            pointer_id: 1,
+            start_x: 0.0,
+            start_y,
+            min_y: start_y - (5.0 * REORDER_ROW_DISTANCE),
+            max_y: start_y + (5.0 * REORDER_ROW_DISTANCE),
+            x: 0.0,
+            y,
+            axis: Some(DragAxis::Vertical),
+        }
+    }
+
+    #[test]
+    fn preview_replaces_the_dragged_row_with_the_target_row() {
+        let items = vec![item(1), item(2), item(3)];
+        let active = vertical_drag(1, 100.0, 176.0);
+
+        assert_eq!(reorder_indices(&items, &active, active.y), Some((0, 1)));
+        assert_eq!(
+            reorder_preview_items(&items, &active)
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            vec![2, 1, 3]
+        );
+        assert_eq!(active_preview_offset_y(&items, &active), 0.0);
+    }
+
+    #[test]
+    fn preview_waits_until_the_drag_reaches_an_adjacent_row() {
+        let items = vec![item(1), item(2), item(3)];
+        let active = vertical_drag(3, 100.0, 63.0);
+
+        assert_eq!(reorder_indices(&items, &active, active.y), None);
+        assert_eq!(
+            reorder_preview_items(&items, &active)
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+
+        let active = vertical_drag(3, 100.0, 16.0);
+        assert_eq!(reorder_indices(&items, &active, active.y), Some((2, 1)));
+        assert_eq!(
+            reorder_preview_items(&items, &active)
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            vec![1, 3, 2]
+        );
+    }
+
+    #[test]
+    fn preview_reorders_across_the_full_checklist_with_the_first_displaced_row_in_the_old_slot() {
+        let items = (1..=6).map(item).collect::<Vec<_>>();
+        let active = vertical_drag(1, 100.0, 100.0 + (REORDER_ROW_DISTANCE * 5.0));
+
+        assert_eq!(reorder_indices(&items, &active, active.y), Some((0, 5)));
+        assert_eq!(
+            reorder_preview_items(&items, &active)
+                .iter()
+                .map(|item| item.id)
+                .collect::<Vec<_>>(),
+            vec![2, 3, 4, 5, 6, 1]
+        );
+        assert_eq!(active_preview_offset_y(&items, &active), 0.0);
+    }
+
+    #[test]
+    fn vertical_drag_is_constrained_to_the_checklist_rows() {
+        let active = DragState {
+            min_y: 100.0,
+            max_y: 252.0,
+            ..vertical_drag(1, 100.0, 100.0)
+        };
+
+        assert_eq!(constrained_vertical_y(&active, 20.0), 100.0);
+        assert_eq!(constrained_vertical_y(&active, 180.0), 180.0);
+        assert_eq!(constrained_vertical_y(&active, 340.0), 252.0);
+    }
 }
